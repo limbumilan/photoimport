@@ -99,17 +99,17 @@ sql3 = f"""
      ON LD.ISSUE_AUTHORITY_ID=b.user_id
      
      WHERE A.ID IN ({bind_vars3})
+     
      and b.signature is not null
      and
-     ld.expirydate=(SELECT MAX(expirydate)
+      LD.ID = ( SELECT ID
         FROM EDLVRS.LICENSEDETAIL
-        WHERE LICENSE_ID = L.ID)
-    and ld.issuedate=(
-       SELECT MAX(issuedate)
-        FROM EDLVRS.LICENSEDETAIL
-        WHERE LICENSE_ID = L.ID)
+        WHERE LICENSE_ID = L.ID
+        ORDER BY issuedate DESC
+        FETCH FIRST 1 ROW ONLY )
     
-"""
+    """
+
 cursor3.execute(sql3,id_list)
    
 
