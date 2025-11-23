@@ -42,3 +42,50 @@ WHERE LD.NEWLICENSENO IN (
 AND LD.expirydate = ( SELECT MAX(expirydate)
         FROM EDLVRS.LICENSEDETAIL
         WHERE LICENSE_ID = L.ID)
+ select  A.id,B.user_id
+     FROM EDLVRS.APPLICANT A
+     INNER JOIN EDLVRS.LICENSE L
+     ON A.ID=L.APPLICANT_ID
+     INNER JOIN EDLVRS.LICENSEDETAIL LD
+     ON L.ID=LD.LICENSE_ID
+     INNER JOIN EDLVRS.DOTM_USER_BIOMETRIC B
+     ON LD.ISSUE_AUTHORITY_ID=b.user_id
+     
+     WHERE A.ID IN (
+     8588673
+
+     )
+     and b.signature is not null and
+     ld.expirydate=(
+       SELECT MAX(expirydate)
+        FROM EDLVRS.LICENSEDETAIL
+        WHERE LICENSE_ID = L.ID)
+        
+        and ld.issuedate=(
+       SELECT MAX(issuedate)
+        FROM EDLVRS.LICENSEDETAIL
+        WHERE LICENSE_ID = L.ID)
+    =========================================
+    #..............................finAL
+    =========================================
+        
+SELECT DISTINCT 
+       A.id,
+       B.user_id
+FROM EDLVRS.APPLICANT A
+JOIN EDLVRS.LICENSE L
+     ON A.ID = L.APPLICANT_ID
+JOIN EDLVRS.LICENSEDETAIL LD
+     ON L.ID = LD.LICENSE_ID
+JOIN EDLVRS.DOTM_USER_BIOMETRIC B
+     ON LD.ISSUE_AUTHORITY_ID = B.user_id
+WHERE A.ID = 8588673
+  AND B.signature IS NOT NULL
+  AND LD.ID = (
+        SELECT ID
+        FROM EDLVRS.LICENSEDETAIL
+        WHERE LICENSE_ID = L.ID
+        ORDER BY issuedate DESC
+        FETCH FIRST 1 ROW ONLY
+      );
+        
