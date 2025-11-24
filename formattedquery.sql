@@ -1,3 +1,4 @@
+
 SELECT distinct
     A.ID as ProdutID,
     A.LASTNAME AS Surname, A.FIRSTNAME || ' ' || A.MIDDLENAME  AS Given_Name,
@@ -8,14 +9,15 @@ SELECT distinct
     
     A.CITIZENSHIPNUMBER as Citizenship_No,
     A.PASSPORTNUMBER as Passport_No,
-    ' ' as Photo,
+    'Photo\'||A.id||'.jpg ' as Photo,
     A.MOBILENUMBER as Contact_No,
     (select name from edlvrs.licenseissueoffice WHERE ID=ld.licenseissueoffice_id )AS License_Office,
     A.WITNESSFIRSTNAME || ' ' || NVL(A.WITNESSMIDDLENAME,'') || ' ' || A.WITNESSLASTNAME AS FH_Name,
     (SELECT NAME FROM EDLVRS.DISTRICT WHERE ID = AD.DISTRICT_ID) AS Region,
-    (SELECT TYPE FROM EDLVRS.BLOODGROUP WHERE ID = A.BLOODGROUP_ID) AS BG,
-    (SELECT NAME FROM EDLVRS.VILLAGEMETROCITY WHERE ID = AD.VILLAGEMETROCITY_ID)
-      || ' ' || AD.WARDNUMBER AS Street_House_Number,
+    
+    (SELECT NAME FROM EDLVRS.VILLAGEMETROCITY WHERE ID = ad.VILLAGEMETROCITY_ID)||','||ad.tole||'-'||ad.wardnumber AS Street_House_Number,
+     
+      (SELECT TYPE FROM EDLVRS.BLOODGROUP WHERE ID = A.BLOODGROUP_ID) AS BG,
     LD.NEWLICENSENO as Driving_License_No,
     (Select name from edlvrs.country where id=AD.Country_id)as Country,
 
@@ -26,8 +28,8 @@ SELECT distinct
      JOIN edlvrs.licensecategorytype tcl ON tcl.id = cl.lisccategorytype_id
      WHERE dl.newlicenseno = LD.newlicenseno
     ) AS Category,  
-    ' ' AS Signature1,
-    ' ' As Signature2
+    'Sign1\'||A.id||'.jpg' AS Signature1,
+    'Sign2\'||A.id||'.jpg' As Signature2
 FROM EDLVRS.LICENSEDETAIL LD
 JOIN EDLVRS.LICENSE L
     ON LD.LICENSE_ID = L.ID
@@ -38,13 +40,17 @@ LEFT JOIN EDLVRS.ADDRESS AD
 
 WHERE LD.NEWLICENSENO IN (
 
-'01-01-00587218'
+
 ) 
 
 AND LD.expirydate = ( SELECT MAX(expirydate)
         FROM EDLVRS.LICENSEDETAIL
-        WHERE LICENSE_ID = L.ID)
+        WHERE LICENSE_ID = L.ID
+        having ld.expirydate > sysdate
+        )
 and ld.issuedate=(
        SELECT MAX(issuedate)
         FROM EDLVRS.LICENSEDETAIL
-        WHERE LICENSE_ID = L.ID)        
+        WHERE LICENSE_ID = L.ID)
+and ad.addresstype='PERM'
+  
