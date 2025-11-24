@@ -15,7 +15,7 @@ SELECT distinct
     A.WITNESSFIRSTNAME || ' ' || NVL(A.WITNESSMIDDLENAME,'') || ' ' || A.WITNESSLASTNAME AS FH_Name,
     (SELECT NAME FROM EDLVRS.DISTRICT WHERE ID = AD.DISTRICT_ID) AS Region,
     
-    (SELECT NAME FROM EDLVRS.VILLAGEMETROCITY WHERE ID = ad.VILLAGEMETROCITY_ID)||','||ad.tole||'-'||ad.wardnumber AS Street_House_Number,
+    coalesce(nullif((SELECT NAME FROM EDLVRS.VILLAGEMETROCITY WHERE ID = ad.VILLAGEMETROCITY_ID),'OTHERS'),'')||' '||coalesce(ad.tole,' ')||'-'||coalesce(ad.wardnumber,' ') AS Street_House_Number,
      
       (SELECT TYPE FROM EDLVRS.BLOODGROUP WHERE ID = A.BLOODGROUP_ID) AS BG,
     LD.NEWLICENSENO as Driving_License_No,
