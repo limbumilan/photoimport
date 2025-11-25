@@ -1,6 +1,7 @@
 
+
 SELECT distinct
-    A.ID as ProdutID,
+    A.ID as ProductID,
     A.LASTNAME AS Surname, A.FIRSTNAME || ' ' || A.MIDDLENAME  AS Given_Name,
     (SELECT TYPE FROM EDLVRS.GENDER WHERE ID = A.GENDER_ID) AS Sex, TO_CHAR (a.dateofbirthad,'DD-MM-YYYY') AS Date_of_birth,
     'Government of Nepal' as Nationality,
@@ -13,13 +14,15 @@ SELECT distinct
     A.MOBILENUMBER as Contact_No,
     (select name from edlvrs.licenseissueoffice WHERE ID=ld.licenseissueoffice_id )AS License_Office,
     A.WITNESSFIRSTNAME || ' ' || NVL(A.WITNESSMIDDLENAME,'') || ' ' || A.WITNESSLASTNAME AS FH_Name,
+    (SELECT TYPE FROM EDLVRS.BLOODGROUP WHERE ID = A.BLOODGROUP_ID) AS BG,
     (SELECT NAME FROM EDLVRS.DISTRICT WHERE ID = AD.DISTRICT_ID) AS Region,
     
     coalesce(nullif((SELECT NAME FROM EDLVRS.VILLAGEMETROCITY WHERE ID = ad.VILLAGEMETROCITY_ID),'OTHERS'),'')||' '||coalesce(ad.tole,' ')||'-'||coalesce(ad.wardnumber,' ') AS Street_House_Number,
-     
-      (SELECT TYPE FROM EDLVRS.BLOODGROUP WHERE ID = A.BLOODGROUP_ID) AS BG,
+    (Select name from edlvrs.country where id=AD.Country_id)as Country, 
+    ' ' as VMT,
     LD.NEWLICENSENO as Driving_License_No,
-    (Select name from edlvrs.country where id=AD.Country_id)as Country,
+    
+    
 
     -- CATEGORY FIXED: AGGREGATED ONLY ONCE
     (SELECT LISTAGG(tcl.type, ', ') WITHIN GROUP (ORDER BY tcl.type)
@@ -30,6 +33,7 @@ SELECT distinct
     ) AS Category,  
     'Sign1\'||A.id||'.jpg' AS Signature1,
     'Sign2\'||A.id||'.jpg' As Signature2
+    
 FROM EDLVRS.LICENSEDETAIL LD
 JOIN EDLVRS.LICENSE L
     ON LD.LICENSE_ID = L.ID
@@ -39,6 +43,9 @@ LEFT JOIN EDLVRS.ADDRESS AD
     ON A.ID = AD.APPLICANT_ID
 
 WHERE LD.NEWLICENSENO IN (
+
+
+
 
 
 ) 
