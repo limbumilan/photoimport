@@ -42,6 +42,7 @@ JOIN EDLVRS.APPLICANT A
 LEFT JOIN EDLVRS.ADDRESS AD
     ON A.ID = AD.APPLICANT_ID
 
+
 WHERE LD.NEWLICENSENO IN (
 
 
@@ -53,11 +54,12 @@ WHERE LD.NEWLICENSENO IN (
 AND LD.expirydate = ( SELECT MAX(expirydate)
         FROM EDLVRS.LICENSEDETAIL
         WHERE LICENSE_ID = L.ID
-        having ld.expirydate > sysdate
+        having ld.expirydate > ADD_MONTHS(SYSDATE, 6)
         )
 and ld.issuedate=(
        SELECT MAX(issuedate)
         FROM EDLVRS.LICENSEDETAIL
         WHERE LICENSE_ID = L.ID)
 and ad.addresstype='PERM'
+and l.printed <> 3
   
