@@ -4,214 +4,223 @@ from datetime import datetime
 import os
 import getpass
 
-# ------------------------------
-# ORACLE CONNECTION DETAILS
-# ------------------------------
-username = "dotm_milan"
-dsn = "10.250.252.201/DOTM"
-password = getpass.getpass(f"Enter password for {username}@{dsn}: ")
+# ============================================
+# CONFIG
+# ============================================
+USERNAME = "dotm_milan"
+DSN = "10.250.252.201/DOTM"
 
-# ------------------------------
-# OUTPUT FOLDERS
-# ------------------------------
-output_folder_photos = r"/Users/milanlimbu/desktop/data/Photos"
-output_folder_sign1 = r"/Users/milanlimbu/desktop/data/Sign1"
-output_folder_sign2 = r"/Users/milanlimbu/desktop/data/Sign2"
+BASE_DATA_FOLDER = "/Users/milanlimbu/desktop/data"
 
-os.makedirs(output_folder_photos, exist_ok=True)
-os.makedirs(output_folder_sign1, exist_ok=True)
-os.makedirs(output_folder_sign2, exist_ok=True)
+OUTPUT_DIRS = {
+    "photo": os.path.join(BASE_DATA_FOLDER, "Photo"),
+    "sign1": os.path.join(BASE_DATA_FOLDER, "Sign1"),
+    "sign2": os.path.join(BASE_DATA_FOLDER, "Sign2")
+}
 
-# ------------------------------
-# INPUT LICENSE NUMBERS
-# ------------------------------
-raw_input_ids = input("Enter License Numbers (comma or space separated): ")
-license_numbers = [x.strip() for x in raw_input_ids.replace(",", " ").split() if x.strip()]
-print(f"Processing licenses: {license_numbers}")
+# Create folders if missing
+os.makedirs(BASE_DATA_FOLDER, exist_ok=True)
+for folder in OUTPUT_DIRS.values():
+    os.makedirs(folder, exist_ok=True)
 
-if not license_numbers:
-    print("No license numbers entered. Exiting.")
-    exit()
-
-# ------------------------------
-# SQL QUERY
-# ------------------------------
-SQL_QUERY = """
-SELECT DISTINCT
-    A.ID AS ProdutID,
+# ============================================
+# SQL - MAIN LICENSE QUERY
+# ============================================
+SQL_LICENSE_INFO = """
+SELECT
+    A.ID AS PRODUTID,
     A.LASTNAME AS Surname,
     A.FIRSTNAME || ' ' || NVL(A.MIDDLENAME,'') AS Given_Name,
     (SELECT TYPE FROM EDLVRS.GENDER WHERE ID = A.GENDER_ID) AS Sex,
     TO_CHAR(A.DATEOFBIRTHAD,'DD-MM-YYYY') AS Date_of_birth,
     'Government of Nepal' AS Nationality,
-    (SELECT TO_CHAR(MIN(CAST(ISSUEDATE AS DATE)), 'DD-MM-YYYY')
-       FROM EDLVRS.LICENSEDETAIL
-       WHERE NEWLICENSENO = LD.NEWLICENSENO) AS Date_of_issue,
-    TO_CHAR(LD.EXPIRYDATE,'DD-MM-YYYY') AS Date_of_expiry,
+    
+    (SELECT TO_CHAR(MIN(CAST(ISSUEDATE AS DATE)),'DD-MM-YYYY')
+       FROM edlvrs.licensedetail
+       WHERE newlicenseno = ld.newlicenseno) AS Date_of_issue,
+
+    TO_CHAR(LD.EXPIRYDATE, 'DD-MM-YYYY') AS Date_of_expiry,
+
     A.CITIZENSHIPNUMBER AS Citizenship_No,
     A.PASSPORTNUMBER AS Passport_No,
-    'Photo'||A.ID||'.jpg' AS Photo,
+    'Photo' || A.ID || '.jpg' AS Photo,
     A.MOBILENUMBER AS Contact_No,
-    (SELECT NAME FROM EDLVRS.LICENSEISSUEOFFICE WHERE ID = LD.LICENSEISSUEOFFICE_ID) AS License_Office,
+    (SELECT name FROM edlvrs.licenseissueoffice WHERE ID = ld.licenseissueoffice_id) AS License_Office,
+
     A.WITNESSFIRSTNAME || ' ' || NVL(A.WITNESSMIDDLENAME,'') || ' ' || NVL(A.WITNESSLASTNAME,'') AS FH_Name,
-    (SELECT NAME FROM EDLVRS.DISTRICT WHERE ID = AD.DISTRICT_ID) AS Region,
-    COALESCE(NULLIF((SELECT NAME FROM EDLVRS.VILLAGEMETROCITY WHERE ID = AD.VILLAGEMETROCITY_ID),'OTHERS'),'') 
-    || ' ' || COALESCE(AD.TOLE,'') || '-' || COALESCE(AD.WARDNUMBER,'') AS Street_House_Number,
-    (SELECT TYPE FROM EDLVRS.BLOODGROUP WHERE ID = A.BLOODGROUP_ID) AS BG,
+
+    (SELECT TYPE FROM edlvrs.bloodgroup WHERE ID = A.BLOODGROUP_ID) AS BG,
+    (SELECT name FROM edlvrs.district WHERE ID = AD.district_id) AS Region,
+
+    COALESCE(NULLIF(
+        (SELECT NAME FROM edlvrs.villagemetrocity WHERE ID = AD.villagemetrocity_id),
+        'OTHERS'
+    ), '') || ' ' || COALESCE(AD.tole,'') || '-' || COALESCE(AD.wardnumber,'') AS Street_House_Number,
+
+    (SELECT name FROM edlvrs.country WHERE id = AD.country_id) AS Country,
     LD.NEWLICENSENO AS Driving_License_No,
-    (SELECT NAME FROM EDLVRS.COUNTRY WHERE ID = AD.COUNTRY_ID) AS Country,
-    (SELECT LISTAGG(TCL.TYPE, ', ') WITHIN GROUP (ORDER BY TCL.TYPE)
-       FROM EDLVRS.LICENSEDETAIL DL
-       JOIN EDLVRS.LICENSECATEGORY CL ON CL.LICENSEDETAIL_ID = DL.ID
-       JOIN EDLVRS.LICENSECATEGORYTYPE TCL ON TCL.ID = CL.LISCCATEGORYTYPE_ID
-       WHERE DL.NEWLICENSENO = LD.NEWLICENSENO) AS Category,
-    'Sign1'||A.ID||'.jpg' AS Signature1,
-    'Sign2'||A.ID||'.jpg' AS Signature2
-FROM EDLVRS.LICENSEDETAIL LD
-JOIN EDLVRS.LICENSE L ON LD.LICENSE_ID = L.ID
-JOIN EDLVRS.APPLICANT A ON L.APPLICANT_ID = A.ID
-LEFT JOIN EDLVRS.ADDRESS AD ON A.ID = AD.APPLICANT_ID AND AD.ADDRESSTYPE='PERM'
-WHERE LD.NEWLICENSENO = :license_no
-  AND LD.EXPIRYDATE = (
-        SELECT MAX(EXPIRYDATE)
-        FROM EDLVRS.LICENSEDETAIL
-        WHERE LICENSE_ID = L.ID
-      )
-  AND LD.ISSUEDATE = (
-        SELECT MAX(ISSUEDATE)
-        FROM EDLVRS.LICENSEDETAIL
-        WHERE LICENSE_ID = L.ID
-      )
+
+    (SELECT LISTAGG(tcl.type, ', ') WITHIN GROUP (ORDER BY tcl.type)
+       FROM edlvrs.licensedetail dl
+       JOIN edlvrs.licensecategory cl ON cl.licensedetail_id = dl.id
+       JOIN edlvrs.licensecategorytype tcl ON tcl.id = cl.lisccategorytype_id
+       WHERE dl.newlicenseno = LD.newlicenseno) AS Category,
+
+    'Sign1' || A.ID || '.jpg' AS Signature1,
+    'Sign2' || A.ID || '.jpg' AS Signature2
+
+FROM edlvrs.licensedetail LD
+JOIN edlvrs.license L ON LD.license_id = L.id
+JOIN edlvrs.applicant A ON L.applicant_id = A.id
+LEFT JOIN edlvrs.address AD ON A.id = AD.applicant_id AND AD.addresstype='PERM'
+
+WHERE LD.newlicenseno = :license_no
+AND LD.expirydate = (
+        SELECT MAX(expirydate)
+        FROM edlvrs.licensedetail
+        WHERE license_id = L.id
+)
+AND LD.issuedate = (
+        SELECT MAX(issuedate)
+        FROM edlvrs.licensedetail
+        WHERE license_id = L.id
+)
+AND L.printed <> 3
 """
 
-# ------------------------------
-# CONNECT TO ORACLE
-# ------------------------------
-conn = None
-try:
-    conn = oracledb.connect(user=username, password=password, dsn=dsn)
-    all_data = []
-    app_ids = []
+# ============================================
+# BLOB EXPORT UTILITY
+# ============================================
+def save_blob(blob, file_path):
+    with open(file_path, "wb") as f:
+        f.write(blob.read())
 
-    # ------------------------------
-    # FETCH DATA FOR EACH LICENSE
-    # ------------------------------
+def export_blobs(conn, ids, sql_template, out_dir, label):
+    if not ids:
+        print(f"No IDs for {label}.")
+        return
+
+    cursor = conn.cursor()
+
+    bind_vars = {f"id{i}": val for i, val in enumerate(ids)}
+    placeholders = ",".join(f":id{i}" for i in range(len(ids)))
+
+    sql = sql_template.replace("{{IDS}}", placeholders)
+
+    cursor.execute(sql, bind_vars)
+    rows = cursor.fetchall()
+
+    print(f"{label} → {len(rows)} found")
+
+    for aid, blob in rows:
+        path = os.path.join(out_dir, f"{aid}.jpg")
+        save_blob(blob, path)
+        print(f"{label} saved: {path}")
+
+    cursor.close()
+
+# ============================================
+# MAIN
+# ============================================
+def main():
+
+    license_input = input("Enter License Numbers (comma or space separated): ")
+    license_numbers = [x.strip() for x in license_input.replace(",", " ").split() if x.strip()]
+
+    if not license_numbers:
+        print("No license numbers entered.")
+        return
+
+    password = getpass.getpass(f"Enter password for {USERNAME}@{DSN}: ")
+
+    try:
+        conn = oracledb.connect(user=USERNAME, password=password, dsn=DSN)
+        print("\nConnected to Oracle.\n")
+    except Exception as e:
+        print(f"Connection failed: {e}")
+        return
+
+    all_data = []
+    applicant_ids = set()
+
+    # Fetch info
     for lic in license_numbers:
-        print(f"\nFetching data for {lic}...")
+        print(f"\nFetching license → {lic}")
         try:
-            df = pd.read_sql(SQL_QUERY, conn, params={"license_no": lic})
-            print(f"Columns returned: {df.columns.tolist()}")
-            print(f"Rows returned: {len(df)}")
-            if not df.empty:
-                all_data.append(df)
-                ids = df["ProdutID"].dropna().astype(int).tolist()
-                app_ids.extend(ids)
-                print(f"Applicant IDs found: {ids}")
-            else:
-                print(f"No data found for {lic}")
+            df = pd.read_sql(SQL_LICENSE_INFO, conn, params={"license_no": lic})
+
+            if df.empty:
+                print(f"⚠ No data for {lic}")
+                continue
+
+            ids = df["PRODUTID"].dropna().astype(int).tolist()
+            applicant_ids.update(ids)
+            all_data.append(df)
+
+            print(f"✓ Applicant IDs: {ids}")
+
         except Exception as e:
-            print(f"Error fetching {lic}: {e}")
+            print(f"Error: {e}")
 
     if not all_data:
-        print("No records extracted. Exiting.")
-        exit()
+        print("\nNo valid license records found.")
+        return
 
-    # ------------------------------
-    # SAVE EXCEL IN CURRENT FOLDER
-    # ------------------------------
+    # Save Excel in BASE DATA FOLDER
+    excel_path = os.path.join(
+        BASE_DATA_FOLDER,
+        f"license_output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    )
+
     final_df = pd.concat(all_data, ignore_index=True)
-    excel_file = os.path.join(os.getcwd(), f"license_output_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.xlsx")
-    final_df.to_excel(excel_file, index=False)
-    print(f"\nExcel saved → {excel_file}")
+    final_df.to_excel(excel_path, index=False)
 
-    # ------------------------------
-    # Check applicant IDs before exporting images
-    # ------------------------------
-    app_ids = list(set(app_ids))
-    print(f"\nTotal unique applicant IDs for images: {len(app_ids)}")
-    if not app_ids:
-        print("No applicant IDs found for images. Exiting.")
-        exit()
+    print(f"\nExcel saved → {excel_path}")
+    print(f"Total applicant IDs → {len(applicant_ids)}")
 
-    # ------------------------------
-    # BLOB EXPORT FUNCTION
-    # ------------------------------
-    def save_blob(blob, folder, filename):
-        path = os.path.join(folder, filename)
-        with open(path, "wb") as f:
-            f.write(blob.read())
+    ids_list = list(applicant_ids)
 
-    # ------------------------------
-    # PREPARE BIND VARIABLES FOR MULTI-ID
-    # ------------------------------
-    bind_vars = {f"id{i}": val for i, val in enumerate(app_ids)}
-    ids_placeholder = ",".join([f":id{i}" for i in range(len(app_ids))])
-
-    # ------------------------------
-    # EXPORT PHOTOS
-    # ------------------------------
-    sql_photo = f"""
-    SELECT applicant_id, photograph
-    FROM edlvrs.applicant_biometric
-    WHERE applicant_id IN ({ids_placeholder})
-      AND photograph IS NOT NULL
+    # SQL for blobs
+    SQL_PHOTO = """
+        SELECT applicant_id, photograph
+        FROM edlvrs.applicant_biometric
+        WHERE applicant_id IN ({{IDS}})
+          AND photograph IS NOT NULL
     """
-    cursor = conn.cursor()
-    cursor.execute(sql_photo, bind_vars)
-    rows = cursor.fetchall()
-    print(f"Photos to export: {len(rows)}")
-    for aid, blob in rows:
-        save_blob(blob, output_folder_photos, f"{aid}.jpg")
-        print(f"Photo saved → {aid}.jpg")
-    cursor.close()
 
-    # ------------------------------
-    # EXPORT SIGNATURE2
-    # ------------------------------
-    sql_sign2 = f"""
-    SELECT applicant_id, signature
-    FROM edlvrs.applicant_biometric
-    WHERE applicant_id IN ({ids_placeholder})
-      AND signature IS NOT NULL
+    SQL_SIGN2 = """
+        SELECT applicant_id, signature
+        FROM edlvrs.applicant_biometric
+        WHERE applicant_id IN ({{IDS}})
+          AND signature IS NOT NULL
     """
-    cursor = conn.cursor()
-    cursor.execute(sql_sign2, bind_vars)
-    rows = cursor.fetchall()
-    print(f"Signatures2 to export: {len(rows)}")
-    for aid, blob in rows:
-        save_blob(blob, output_folder_sign2, f"{aid}.jpg")
-        print(f"Signature2 saved → {aid}.jpg")
-    cursor.close()
 
-    # ------------------------------
-    # EXPORT SIGNATURE1
-    # ------------------------------
-    sql_sign1 = f"""
-    SELECT A.ID, B.signature
-    FROM EDLVRS.APPLICANT A
-    JOIN EDLVRS.LICENSE L ON A.ID = L.APPLICANT_ID
-    JOIN EDLVRS.LICENSEDETAIL LD ON L.ID = LD.LICENSE_ID
-    JOIN EDLVRS.DOTM_USER_BIOMETRIC B ON LD.ISSUE_AUTHORITY_ID = B.USER_ID
-    WHERE A.ID IN ({ids_placeholder})
-      AND B.signature IS NOT NULL
-      AND LD.ID = (
-          SELECT MAX(ID) FROM EDLVRS.LICENSEDETAIL WHERE LICENSE_ID = L.ID
-      )
+    SQL_SIGN1 = """
+        SELECT A.ID, B.signature
+        FROM edlvrs.applicant A
+        JOIN edlvrs.license L ON A.id = L.applicant_id
+        JOIN edlvrs.licensedetail LD ON L.id = LD.license_id
+        JOIN edlvrs.dotm_user_biometric B ON LD.issue_authority_id = B.user_id
+        WHERE A.id IN ({{IDS}})
+          AND B.signature IS NOT NULL
+          AND LD.id = (
+            SELECT MAX(id) FROM edlvrs.licensedetail WHERE license_id = L.id
+          )
     """
-    cursor = conn.cursor()
-    cursor.execute(sql_sign1, bind_vars)
-    rows = cursor.fetchall()
-    print(f"Signatures1 to export: {len(rows)}")
-    for aid, blob in rows:
-        save_blob(blob, output_folder_sign1, f"{aid}.jpg")
-        print(f"Signature1 saved → {aid}.jpg")
-    cursor.close()
 
-    print("\nAll photos and signatures exported successfully!")
+    print("\n--- Exporting Images ---\n")
 
-except Exception as e:
-    print(f"Unexpected error: {e}")
+    export_blobs(conn, ids_list, SQL_PHOTO, OUTPUT_DIRS["photo"], "Photo")
+    export_blobs(conn, ids_list, SQL_SIGN2, OUTPUT_DIRS["sign2"], "Signature2")
+    export_blobs(conn, ids_list, SQL_SIGN1, OUTPUT_DIRS["sign1"], "Signature1")
 
-finally:
-    if conn:
-        conn.close()
+    print("\nAll tasks completed successfully!")
+    
+
+    conn.close()
+
+# ============================================
+# RUN
+# ============================================
+if __name__ == "__main__":
+    main()
