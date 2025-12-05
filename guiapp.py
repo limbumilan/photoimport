@@ -1,216 +1,282 @@
 import oracledb
 import pandas as pd
 from datetime import datetime
-import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
 import os
+import getpass
+import threading
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog, scrolledtext
 
-# --------------------------------------------------
-# YOUR SQL TEMPLATE
-# --------------------------------------------------
-SQL_QUERY = """
-SELECT DISTINCT
-    A.ID,
-    A.LASTNAME AS SURNAME,
-    A.FIRSTNAME || ' ' || A.MIDDLENAME AS NAME,
-    (SELECT TYPE FROM EDLVRS.GENDER WHERE ID = A.GENDER_ID) AS GENDER,
-    TO_CHAR(a.dateofbirthad,'DD-MM-YYYY') AS DOB,
-    A.CITIZENSHIPNUMBER,
-    A.PASSPORTNUMBER,
-    A.MOBILENUMBER,
-    A.WITNESSFIRSTNAME || ' ' || NVL(A.WITNESSMIDDLENAME,'') || ' ' || A.WITNESSLASTNAME AS WITNESS,
+
+# ============================================
+# CONFIG
+# ============================================
+USERNAME = "dotm_milan"
+DSN = "10.250.252.201/DOTM"
+
+BASE_DATA_FOLDER = os.path.join(os.path.expanduser("~"), "Desktop", "data")
+
+OUTPUT_DIRS = {
+    "photo": os.path.join(BASE_DATA_FOLDER, "Photo"),
+    "sign1": os.path.join(BASE_DATA_FOLDER, "Sign1"),
+    "sign2": os.path.join(BASE_DATA_FOLDER, "Sign2")
+}
+
+# Make folders
+os.makedirs(BASE_DATA_FOLDER, exist_ok=True)
+for f in OUTPUT_DIRS.values():
+    os.makedirs(f, exist_ok=True)
+
+
+# ============================================
+# SQL
+# ============================================
+SQL_LICENSE_INFO = """
+SELECT distinct
+    A.ID as ProductID,
+    A.LASTNAME AS Surname, A.FIRSTNAME || ' ' || A.MIDDLENAME  AS Given_Name,
+    (SELECT TYPE FROM EDLVRS.GENDER WHERE ID = A.GENDER_ID) AS Sex, TO_CHAR (a.dateofbirthad,'DD-MM-YYYY') AS Date_of_birth,
+    'Government of Nepal' as Nationality,
+    (select TO_CHAR(MIN(CAST(issuedate AS DATE)), 'DD-MM-YYYY')  from edlvrs.licensedetail where newlicenseno=ld.newlicenseno) as Date_of_issue,
+    TO_CHAR(LD.EXPIRYDATE , 'DD-MM-YYYY')  AS Date_of_expiry,
+    
+    A.CITIZENSHIPNUMBER as Citizenship_No,
+    A.PASSPORTNUMBER as Passport_No,
+    '@photo\\'||A.id||'.tif ' as Photo,
+    A.MOBILENUMBER as Contact_No,
+    (select name from edlvrs.licenseissueoffice WHERE ID=ld.licenseissueoffice_id )AS License_Office,
+    A.WITNESSFIRSTNAME || ' ' || NVL(A.WITNESSMIDDLENAME,'') || ' ' || A.WITNESSLASTNAME AS FH_Name,
     (SELECT TYPE FROM EDLVRS.BLOODGROUP WHERE ID = A.BLOODGROUP_ID) AS BG,
-    (SELECT NAME FROM EDLVRS.VILLAGEMETROCITY WHERE ID = AD.VILLAGEMETROCITY_ID)
-      || ' ' || AD.WARDNUMBER AS ADDRESS,
-    (SELECT NAME FROM EDLVRS.DISTRICT WHERE ID = AD.DISTRICT_ID) AS DISTRICT,
-    (select name from edlvrs.licenseissueoffice WHERE ID=ld.licenseissueoffice_id )AS LICENSEOFFICE,
-    LD.LICENSEISSUEOFFICE_ID,
-    (
-        SELECT LISTAGG(tcl.type, ', ') WITHIN GROUP (ORDER BY tcl.type)
-        FROM edlvrs.licensedetail dl
-        JOIN edlvrs.licensecategory cl ON cl.licensedetail_id = dl.id
-        JOIN edlvrs.licensecategorytype tcl ON tcl.id = cl.lisccategorytype_id
-        WHERE dl.newlicenseno = LD.newlicenseno
-    ) AS CATEGORY,
-    LD.NEWLICENSENO,
-    (SELECT TO_CHAR(MIN(CAST(issuedate AS DATE)), 'DD-MM-YYYY')
-        FROM edlvrs.licensedetail
-        WHERE newlicenseno = ld.newlicenseno
-    ) AS ISSUEDATE,
-    TO_CHAR(LD.EXPIRYDATE , 'DD-MM-YYYY')  AS EXPIRYDATE
+    (SELECT NAME FROM EDLVRS.DISTRICT WHERE ID = AD.DISTRICT_ID) AS Region,
+    
+    coalesce(nullif((SELECT NAME FROM EDLVRS.VILLAGEMETROCITY WHERE ID = ad.VILLAGEMETROCITY_ID),'OTHERS'),'')||' '||coalesce(ad.tole,' ')||'-'||coalesce(ad.wardnumber,' ') AS Street_House_Number,
+    (Select name from edlvrs.country where id=AD.Country_id)as Country, 
+    ' ' as VMT,
+    LD.NEWLICENSENO as Driving_License_No,
+    
+    
+
+    -- CATEGORY FIXED: AGGREGATED ONLY ONCE
+    (SELECT LISTAGG(tcl.type, ', ') WITHIN GROUP (ORDER BY tcl.type)
+     FROM edlvrs.licensedetail dl
+     JOIN edlvrs.licensecategory cl ON cl.licensedetail_id = dl.id
+     JOIN edlvrs.licensecategorytype tcl ON tcl.id = cl.lisccategorytype_id
+     WHERE dl.newlicenseno = LD.newlicenseno
+    ) AS Category,  
+    'Sign1\\'||A.id||'.jpg' AS Signature1,
+    'Sign2\\'||A.id||'.jpg' As Signature2
+    
 FROM EDLVRS.LICENSEDETAIL LD
-JOIN EDLVRS.LICENSE L ON LD.LICENSE_ID = L.ID
-JOIN EDLVRS.APPLICANT A ON L.APPLICANT_ID = A.ID
-LEFT JOIN EDLVRS.ADDRESS AD ON A.ID = AD.APPLICANT_ID
-WHERE LD.NEWLICENSENO = :license_no
-AND LD.expirydate = (
-     SELECT MAX(expirydate)
-     FROM EDLVRS.LICENSEDETAIL
-     WHERE LICENSE_ID = L.ID
-)
+JOIN EDLVRS.LICENSE L
+    ON LD.LICENSE_ID = L.ID
+JOIN EDLVRS.APPLICANT A
+    ON L.APPLICANT_ID = A.ID
+LEFT JOIN EDLVRS.ADDRESS AD
+    ON A.ID = AD.APPLICANT_ID
+
+
+WHERE LD.NEWLICENSENO =:license_no
+
+
+
+AND LD.expirydate = ( SELECT MAX(expirydate)
+        FROM EDLVRS.LICENSEDETAIL
+        WHERE LICENSE_ID = L.ID
+        having ld.expirydate > ADD_MONTHS(SYSDATE, 6)
+        )
+and ld.issuedate=(
+       SELECT MAX(issuedate)
+        FROM EDLVRS.LICENSEDETAIL
+        WHERE LICENSE_ID = L.ID)
+and ad.addresstype='PERM'
+and l.printed <> 3
+  
+        
 """
 
-# --------------------------------------------------
-# GUI Application
-# --------------------------------------------------
-class LicenseExtractorGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Oracle License Data Extractor")
-        self.root.geometry("720x600")
+SQL_PHOTO = """
+    SELECT applicant_id, photograph
+    FROM edlvrs.applicant_biometric
+    WHERE applicant_id IN ({{IDS}})
+      AND photograph IS NOT NULL
+"""
 
-        self.license_numbers = set()
-    def refresh_all(self):
-        self.license_numbers.clear()
-        self.manual_entry.delete(0, tk.END)
+SQL_SIGN2 = """
+    SELECT applicant_id, signature
+    FROM edlvrs.applicant_biometric
+    WHERE applicant_id IN ({{IDS}})
+      AND signature IS NOT NULL
+"""
 
-        self.display.delete("1.0", tk.END)
-        self.log.delete("1.0", tk.END)
+SQL_SIGN1 = """
+    SELECT A.ID, B.signature
+    FROM edlvrs.applicant A
+    JOIN edlvrs.license L ON A.id = L.applicant_id
+    JOIN edlvrs.licensedetail LD ON L.id = LD.license_id
+    JOIN edlvrs.dotm_user_biometric B ON LD.issue_authority_id = B.user_id
+    WHERE A.id IN ({{IDS}})
+      AND B.signature IS NOT NULL
+      AND LD.id = (
+        SELECT MAX(id) FROM edlvrs.licensedetail WHERE license_id = L.id
+      )
+"""
 
-        self.log_msg("Refreshed. You can start new extraction.")
+
+# ============================================
+# Helper Functions
+# ============================================
+def log(text):
+    log_box.insert(tk.END, text + "\n")
+    log_box.see(tk.END)
 
 
-        # Database Fields
-        #tk.Label(root, text="Oracle Username:").pack()
-        #self.username = tk.Entry(root, width=40)
-        #self.username.pack()
+def save_blob(blob, file_path):
+    with open(file_path, "wb") as f:
+        f.write(blob.read())
 
-        #tk.Label(root, text="Oracle Password:").pack()
-        #self.password = tk.Entry(root, width=40, show="*")
-        #self.password.pack()
 
-        #tk.Label(root, text="Oracle DSN (host:port/service):").pack()
-        #self.dsn = tk.Entry(root, width=40)
-        #self.dsn.pack()
+def export_blobsphoto(conn, ids, sql_template, output_dir, label):
+    if not ids:
+        log(f"No IDs for {label}.")
+        return
 
-        tk.Label(root, text=" ").pack()
-        
-        
+    cursor = conn.cursor()
+    binds = {f"id{i}": val for i, val in enumerate(ids)}
+    placeholders = ",".join(f":id{i}" for i in range(len(ids)))
 
-        # Buttons for loading IDs
-        tk.Button(root, text="Load from Text File", width=25, command=self.load_text).pack()
-        tk.Button(root, text="Load from Excel File", width=25, command=self.load_excel).pack()
+    sql = sql_template.replace("{{IDS}}", placeholders)
+    cursor.execute(sql, binds)
 
-        tk.Label(root, text="Or enter license numbers manually (comma separated):").pack()
-        self.manual_entry = tk.Entry(root, width=60)
-        self.manual_entry.pack()
+    rows = cursor.fetchall()
+    log(f"{label}: {len(rows)} found")
 
-        tk.Button(root, text="Add Manual Entry", command=self.add_manual).pack()
+    for aid, blob in rows:
+        path = os.path.join(output_dir, f"{aid}.tif")
+        save_blob(blob, path)
+        log(f"{label} saved → {path}")
 
-        tk.Label(root, text=" ").pack()
+    cursor.close()
 
-        # Display loaded license numbers
-        tk.Label(root, text="License Numbers Loaded:").pack()
-        self.display = scrolledtext.ScrolledText(root, width=80, height=10)
-        self.display.pack()
+def export_blobssign(conn, ids, sql_template, output_dir, label):
+    if not ids:
+        log(f"No IDs for {label}.")
+        return
 
-        # Run Button
-        tk.Button(root, text="RUN EXTRACTION", bg="green", fg="white",
-                  width=30, command=self.run_extraction).pack()
-        
-        tk.Button(root, text="REFRESH / CLEAR", bg="orange", fg="black",
-          width=30, command=self.refresh_all).pack()
+    cursor = conn.cursor()
+    binds = {f"id{i}": val for i, val in enumerate(ids)}
+    placeholders = ",".join(f":id{i}" for i in range(len(ids)))
 
-        # Status Log
-        tk.Label(root, text="Status:").pack()
-        self.log = scrolledtext.ScrolledText(root, width=80, height=10)
-        self.log.pack()
+    sql = sql_template.replace("{{IDS}}", placeholders)
+    cursor.execute(sql, binds)
 
-    # --------------------------------------------------
-    def log_msg(self, text):
-        self.log.insert(tk.END, text + "\n")
-        self.log.see(tk.END)
+    rows = cursor.fetchall()
+    log(f"{label}: {len(rows)} found")
 
-    # --------------------------------------------------
-    def refresh_display(self):
-        self.display.delete("1.0", tk.END)
-        for lic in sorted(self.license_numbers):
-            self.display.insert(tk.END, lic + "\n")
+    for aid, blob in rows:
+        path = os.path.join(output_dir, f"{aid}.jpg")
+        save_blob(blob, path)
+        log(f"{label} saved → {path}")
 
-    # --------------------------------------------------
-    def load_text(self):
-        filename = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt")])
-        if not filename:
-            return
-        with open(filename, "r") as file:
-            for line in file:
-                if line.strip():
-                    self.license_numbers.add(line.strip())
-        self.refresh_display()
+    cursor.close()
 
-    # --------------------------------------------------
-    def load_excel(self):
-        filename = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx")])
-        if not filename:
-            return
-        df = pd.read_excel(filename)
-        for x in df.iloc[:, 0].dropna().astype(str).tolist():
-            self.license_numbers.add(x)
-        self.refresh_display()
+# ============================================
+# Processing Thread
+# ============================================
+def start_processing():
+    thread = threading.Thread(target=run_main_process)
+    thread.start()
 
-    # --------------------------------------------------
-    def add_manual(self):
-        text = self.manual_entry.get().strip()
-        if text:
-            for x in text.split(","):
-                if x.strip():
-                    self.license_numbers.add(x.strip())
-        self.manual_entry.delete(0, tk.END)
-        self.refresh_display()
 
-    # --------------------------------------------------
-    def run_extraction(self):
-        if not self.license_numbers:
-            messagebox.showwarning("No License Numbers", "Please load or enter license numbers.")
-            return
+def run_main_process():
+    license_input = entry_license.get().strip()
+    if not license_input:
+        messagebox.showwarning("Missing Input", "Enter license numbers.")
+        return
 
-        username = "dotm_milan"  #self.username.get().strip()
-        password = "123456#AcBd"   #self.password.get().strip()
-        dsn = "10.250.252.201/dotm"  #self.dsn.get().strip()
+    license_numbers = [x.strip() for x in license_input.replace(",", " ").split() if x.strip()]
 
-        if not username or not password or not dsn:
-            messagebox.showwarning("Missing Fields", "Please enter all Oracle connection details.")
-            return
+    password = entry_password.get().strip()
+    if not password:
+        messagebox.showwarning("Missing Password", "Enter Oracle password.")
+        return
 
+    try:
+        conn = oracledb.connect(user=USERNAME, password=password, dsn=DSN)
+        log("Connected to Oracle.")
+    except Exception as e:
+        messagebox.showerror("Connection Failed", str(e))
+        return
+
+    all_data = []
+    applicant_ids = set()
+
+    for lic in license_numbers:
+        log(f"Fetching license → {lic}")
         try:
-            self.log_msg("Connecting to Oracle...")
-            conn = oracledb.connect(user=username,password= password,dsn= dsn)
-
-            all_data = []
-
-            for lic in self.license_numbers:
-                self.log_msg(f"Fetching: {lic}")
-                try:
-                    df = pd.read_sql(SQL_QUERY, conn, params={"license_no": lic})
-                    if not df.empty:
-                        all_data.append(df)
-                    else:
-                        self.log_msg(f"⚠ No data found for {lic}")
-                except Exception as e:
-                    self.log_msg(f"❌ Error for {lic}: {e}")
-
-            if not all_data:
-                self.log_msg("No data extracted!")
-                messagebox.showinfo("Done", "No data found for any license numbers.")
-                return
-
-            final_df = pd.concat(all_data, ignore_index=True)
-
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            output_name = f"license_output_{timestamp}.xlsx"
-            final_df.to_excel(output_name, index=False)
-
-            self.log_msg(f"SUCCESS → Saved as {output_name}")
-            messagebox.showinfo("Success", f"Data successfully extracted.\nSaved as:\n{output_name}")
-
+            df = pd.read_sql(SQL_LICENSE_INFO, conn, params={"license_no": lic})
         except Exception as e:
-            self.log_msg(f"Connection Error: {e}")
-            messagebox.showerror("Error", str(e))
+            log(f"Error fetching {lic}: {e}")
+            continue
+
+        if df.empty:
+            log(f"No data for {lic}")
+            continue
+
+        ids = df["PRODUCTID"].dropna().astype(int).tolist()
+        applicant_ids.update(ids)
+        all_data.append(df)
+
+        log(f"Applicant IDs: {ids}")
+
+    if not all_data:
+        log("No valid license records found.")
+        return
+
+    csv_path = os.path.join(
+        BASE_DATA_FOLDER,
+        f"license_output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    )
+
+    final_df = pd.concat(all_data, ignore_index=True)
+    
+    final_df.to_csv(csv_path, index=False, encoding="utf-8")
+    log(f"csv saved → {csv_path}")
+    log(f"Total applicant IDs: {len(applicant_ids)}")
+
+    id_list = list(applicant_ids)
+
+    log("--- Exporting Images ---")
+
+    export_blobsphoto(conn, id_list, SQL_PHOTO, OUTPUT_DIRS["photo"], "Photo")
+    export_blobssign(conn, id_list, SQL_SIGN2, OUTPUT_DIRS["sign2"], "Signature2")
+    export_blobssign(conn, id_list, SQL_SIGN1, OUTPUT_DIRS["sign1"], "Signature1")
+
+    conn.close()
+    log("All tasks completed!")
 
 
-# --------------------------------------------------
-# START GUI
-# --------------------------------------------------
+# ============================================
+# GUI WINDOW
+# ============================================
 root = tk.Tk()
-app = LicenseExtractorGUI(root)
+root.title("DOTM License Data Extractor")
+root.geometry("750x600")
+
+# License input
+ttk.Label(root, text="License Numbers (comma/space separated):").pack(anchor="w", padx=10, pady=5)
+entry_license = ttk.Entry(root, width=80)
+entry_license.pack(padx=10)
+
+# Password input
+ttk.Label(root, text="Oracle Password:").pack(anchor="w", padx=10, pady=5)
+entry_password = ttk.Entry(root, width=40, show="*")
+entry_password.pack(padx=10)
+
+# Start button
+ttk.Button(root, text="START PROCESS", command=start_processing).pack(pady=10)
+
+# Log window
+log_box = scrolledtext.ScrolledText(root, width=90, height=25)
+log_box.pack(padx=10, pady=10)
+
 root.mainloop()
