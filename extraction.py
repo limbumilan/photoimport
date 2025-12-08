@@ -10,7 +10,7 @@ import getpass
 USERNAME = "dotm_milan"
 DSN = "10.250.252.201/DOTM"
 
-BASE_DATA_FOLDER = "/Users/milanlimbu/desktop/data"
+BASE_DATA_FOLDER = r"C:\Users\HP\Desktop\DATA"
 
 OUTPUT_DIRS = {
     "photo": os.path.join(BASE_DATA_FOLDER, "Photo"),
@@ -28,7 +28,7 @@ for folder in OUTPUT_DIRS.values():
 # ============================================
 SQL_LICENSE_INFO = """
 SELECT
-    A.ID AS PRODUTID,
+    A.ID AS PRODUCTID,
     A.LASTNAME AS Surname,
     A.FIRSTNAME || ' ' || NVL(A.MIDDLENAME,'') AS Given_Name,
     (SELECT TYPE FROM EDLVRS.GENDER WHERE ID = A.GENDER_ID) AS Sex,
@@ -43,7 +43,7 @@ SELECT
 
     A.CITIZENSHIPNUMBER AS Citizenship_No,
     A.PASSPORTNUMBER AS Passport_No,
-    'Photo' || A.ID || '.jpg' AS Photo,
+    '@photo\\' || A.ID || '.tif' AS Photo,
     A.MOBILENUMBER AS Contact_No,
     (SELECT name FROM edlvrs.licenseissueoffice WHERE ID = ld.licenseissueoffice_id) AS License_Office,
 
@@ -59,15 +59,12 @@ SELECT
 
     (SELECT name FROM edlvrs.country WHERE id = AD.country_id) AS Country,
     LD.NEWLICENSENO AS Driving_License_No,
-
+    
     (SELECT LISTAGG(tcl.type, ', ') WITHIN GROUP (ORDER BY tcl.type)
        FROM edlvrs.licensedetail dl
        JOIN edlvrs.licensecategory cl ON cl.licensedetail_id = dl.id
        JOIN edlvrs.licensecategorytype tcl ON tcl.id = cl.lisccategorytype_id
-       WHERE dl.newlicenseno = LD.newlicenseno) AS Category,
-
-    'Sign1' || A.ID || '.jpg' AS Signature1,
-    'Sign2' || A.ID || '.jpg' AS Signature2
+       WHERE dl.newlicenseno = LD.newlicenseno) AS Category
 
 FROM edlvrs.licensedetail LD
 JOIN edlvrs.license L ON LD.license_id = L.id
@@ -75,17 +72,18 @@ JOIN edlvrs.applicant A ON L.applicant_id = A.id
 LEFT JOIN edlvrs.address AD ON A.id = AD.applicant_id AND AD.addresstype='PERM'
 
 WHERE LD.newlicenseno = :license_no
-AND LD.expirydate = (
-        SELECT MAX(expirydate)
-        FROM edlvrs.licensedetail
-        WHERE license_id = L.id
-)
-AND LD.issuedate = (
-        SELECT MAX(issuedate)
-        FROM edlvrs.licensedetail
-        WHERE license_id = L.id
-)
-AND L.printed <> 3
+AND LD.expirydate = ( SELECT MAX(expirydate)
+        FROM EDLVRS.LICENSEDETAIL
+        WHERE LICENSE_ID = L.ID
+        having ld.expirydate > ADD_MONTHS(SYSDATE, 6)
+        )
+and ld.issuedate=(
+       SELECT MAX(issuedate)
+        FROM EDLVRS.LICENSEDETAIL
+        WHERE LICENSE_ID = L.ID)
+and ad.addresstype='PERM'
+and l.printed <> 3
+
 """
 
 # ============================================
@@ -95,13 +93,35 @@ def save_blob(blob, file_path):
     with open(file_path, "wb") as f:
         f.write(blob.read())
 
-def export_blobs(conn, ids, sql_template, out_dir, label):
+def export_blobsphoto(conn, ids, sql_template, out_dir, label):
     if not ids:
         print(f"No IDs for {label}.")
         return
 
     cursor = conn.cursor()
+    bind_vars = {f"id{i}": val for i, val in enumerate(ids)}
+    placeholders = ",".join(f":id{i}" for i in range(len(ids)))
 
+    sql = sql_template.replace("{{IDS}}", placeholders)
+
+    cursor.execute(sql, bind_vars)
+    rows = cursor.fetchall()
+
+    print(f"{label} → {len(rows)} found")
+
+    for aid, blob in rows:
+        path = os.path.join(out_dir, f"{aid}.tif")
+        save_blob(blob, path)
+        print(f"{label} saved: {path}")
+
+    cursor.close()
+
+def export_sign(conn, ids, sql_template, out_dir, label):
+    if not ids:
+        print(f"No IDs for {label}.")
+        return
+
+    cursor = conn.cursor()
     bind_vars = {f"id{i}": val for i, val in enumerate(ids)}
     placeholders = ",".join(f":id{i}" for i in range(len(ids)))
 
@@ -118,6 +138,7 @@ def export_blobs(conn, ids, sql_template, out_dir, label):
         print(f"{label} saved: {path}")
 
     cursor.close()
+
 
 # ============================================
 # MAIN
@@ -153,7 +174,7 @@ def main():
                 print(f"⚠ No data for {lic}")
                 continue
 
-            ids = df["PRODUTID"].dropna().astype(int).tolist()
+            ids = df["PRODUCTID"].dropna().astype(int).tolist()
             applicant_ids.update(ids)
             all_data.append(df)
 
@@ -166,16 +187,16 @@ def main():
         print("\nNo valid license records found.")
         return
 
-    # Save Excel in BASE DATA FOLDER
-    excel_path = os.path.join(
+    # Save CSV
+    csv_path = os.path.join(
         BASE_DATA_FOLDER,
-        f"license_output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        f"license_output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     )
 
     final_df = pd.concat(all_data, ignore_index=True)
-    final_df.to_excel(excel_path, index=False)
+    final_df.to_csv(csv_path, index=False)
 
-    print(f"\nExcel saved → {excel_path}")
+    print(f"\nCSV saved → {csv_path}")
     print(f"Total applicant IDs → {len(applicant_ids)}")
 
     ids_list = list(applicant_ids)
@@ -210,13 +231,11 @@ def main():
 
     print("\n--- Exporting Images ---\n")
 
-    export_blobs(conn, ids_list, SQL_PHOTO, OUTPUT_DIRS["photo"], "Photo")
-    export_blobs(conn, ids_list, SQL_SIGN2, OUTPUT_DIRS["sign2"], "Signature2")
-    export_blobs(conn, ids_list, SQL_SIGN1, OUTPUT_DIRS["sign1"], "Signature1")
+    export_blobsphoto(conn, ids_list, SQL_PHOTO, OUTPUT_DIRS["photo"], "Photo")
+    export_sign(conn, ids_list, SQL_SIGN2, OUTPUT_DIRS["sign2"], "Signature2")
+    export_sign(conn, ids_list, SQL_SIGN1, OUTPUT_DIRS["sign1"], "Signature1")
 
     print("\nAll tasks completed successfully!")
-    
-
     conn.close()
 
 # ============================================
