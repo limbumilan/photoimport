@@ -257,7 +257,7 @@ class LicenseGUI:
              title="Save CSV file"
              )
         if file:
-            self.df.to_csv(file, index=False)
+            self.df.to_csv(file, index=False,encoding="utf-8-sig")
             messagebox.showinfo("Saved", "csv exported successfully!")
 
 # ============================================
