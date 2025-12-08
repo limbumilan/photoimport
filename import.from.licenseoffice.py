@@ -1,3 +1,4 @@
+
 import oracledb
 import pandas as pd
 import tkinter as tk
@@ -116,39 +117,42 @@ def export_blobsign(conn, ids, sql_template, out_dir, label):
 # GUI CLASS
 # ============================================
 class LicenseGUI:
+    
     def __init__(self, root):
+        
         self.root = root
-        root.title("Driving License Data Fetcher")
-        root.geometry("1000x600")
+        root.title("Demo Personalization ware")
+        root.geometry("1100x650")
+        root.configure(bg="#87CEEB")  # sky blue background
 
         self.base_folder = None
         self.output_dirs = {}
         self.df = None
 
         # ===== Base Folder Selection =====
-        folder_frame = tk.Frame(root)
+        folder_frame = tk.Frame(root, bg="#87CEEB")
         folder_frame.pack(fill="x", pady=5)
-        tk.Label(folder_frame, text="Base Data Folder:").pack(side="left", padx=5)
-        self.folder_label = tk.Label(folder_frame, text="Not selected", fg="blue")
+        tk.Label(folder_frame, text="Base Data Folder:", bg="#87CEEB", fg="#003366", font=("Arial", 10, "bold")).pack(side="left", padx=5)
+        self.folder_label = tk.Label(folder_frame, text="Not selected", fg="#003366", bg="#87CEEB", font=("Arial", 10))
         self.folder_label.pack(side="left", padx=5)
-        tk.Button(folder_frame, text="Select Folder", command=self.select_base_folder).pack(side="left", padx=5)
+        tk.Button(folder_frame, text="Select Folder", command=self.select_base_folder, bg="#4682B4", fg="white").pack(side="left", padx=5)
 
         # ===== Login Frame =====
-        login_frame = tk.LabelFrame(root, text="Oracle Login", padx=10, pady=10)
-        login_frame.pack(fill="x")
-        tk.Label(login_frame, text="Password:").grid(row=0, column=0)
+        login_frame = tk.LabelFrame(root, text="Oracle Login", padx=10, pady=10, bg="#87CEEB", fg="#003366", font=("Arial", 10, "bold"))
+        login_frame.pack(fill="x", pady=5)
+        tk.Label(login_frame, text="Password:", bg="#87CEEB", fg="#003366").grid(row=0, column=0)
         self.password_entry = tk.Entry(login_frame, show="*")
         self.password_entry.grid(row=0, column=1)
 
         # ===== Filters =====
-        filter_frame = tk.LabelFrame(root, text="Filters", padx=10, pady=10)
-        filter_frame.pack(fill="x")
-        tk.Label(filter_frame, text="Select Office:").grid(row=0, column=0)
+        filter_frame = tk.LabelFrame(root, text="Filters", padx=10, pady=10, bg="#87CEEB", fg="#003366", font=("Arial", 10, "bold"))
+        filter_frame.pack(fill="x", pady=5)
+        tk.Label(filter_frame, text="Select Office:", bg="#87CEEB", fg="#003366").grid(row=0, column=0)
         self.office_combo = ttk.Combobox(filter_frame, width=40)
         self.office_combo.grid(row=0, column=1)
-        tk.Button(filter_frame, text="Load Offices", command=self.load_offices).grid(row=0, column=2, padx=5)
+        tk.Button(filter_frame, text="Load Offices", command=self.load_offices, bg="#4682B4", fg="white").grid(row=0, column=2, padx=5)
 
-        tk.Label(filter_frame, text="From Date:").grid(row=1, column=0)
+        tk.Label(filter_frame, text="From Date:", bg="#87CEEB", fg="#003366").grid(row=1, column=0)
         self.from_day = ttk.Combobox(filter_frame, values=[f"{i:02d}" for i in range(1,32)], width=5)
         self.from_day.grid(row=1, column=1)
         self.from_day.set("01")
@@ -159,7 +163,7 @@ class LicenseGUI:
         self.from_year.grid(row=1, column=3)
         self.from_year.set("2024")
 
-        tk.Label(filter_frame, text="To Date:").grid(row=2, column=0)
+        tk.Label(filter_frame, text="To Date:", bg="#87CEEB", fg="#003366").grid(row=2, column=0)
         self.to_day = ttk.Combobox(filter_frame, values=[f"{i:02d}" for i in range(1,32)], width=5)
         self.to_day.grid(row=2, column=1)
         self.to_day.set("01")
@@ -170,19 +174,26 @@ class LicenseGUI:
         self.to_year.grid(row=2, column=3)
         self.to_year.set("2024")
 
-        tk.Button(filter_frame, text="Fetch Data", command=self.fetch_data).grid(row=3, column=0, columnspan=4, pady=10)
-        tk.Button(root, text="Export CSV", command=self.export_csv).pack(pady=10)
+        tk.Button(filter_frame, text="Fetch Data", command=self.fetch_data, bg="#00BFFF", fg="white").grid(row=3, column=0, columnspan=4, pady=10)
+
         # ===== Table =====
-        table_frame = tk.Frame(root)
-        table_frame.pack(fill="both", expand=True, padx=8, pady=(6,0))
+        table_frame = tk.Frame(root, bg="#87CEEB")
+        table_frame.pack(fill="both", expand=True, padx=8, pady=5)
         self.tree = ttk.Treeview(table_frame, show="headings")
         self.tree.pack(side="top", fill="both", expand=True)
-
-        # horizontal scrollbar
         hsb = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
         hsb.pack(side="bottom", fill="x")
         self.tree.configure(xscrollcommand=hsb.set)
+
+        # ===== Actions =====
+        action_frame = tk.Frame(root, bg="#00FF00")
+        action_frame.pack(fill="x", padx=10, pady=5)
+        tk.Button(action_frame, text="Export CSV", command=self.export_csv, bg="#1E90FF", fg="black").pack(side="left", padx=5)
+        self.status_label = tk.Label(action_frame, text="Status: Ready", anchor="w", bg="#87CEEB", fg="#003366")
+        self.status_label.pack(side="left", padx=20)
+
         
+    
     
 
     # ===== Base Folder Selection =====
