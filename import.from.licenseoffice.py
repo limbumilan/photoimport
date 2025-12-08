@@ -1,4 +1,3 @@
-
 import oracledb
 import pandas as pd
 import tkinter as tk
@@ -11,30 +10,6 @@ from datetime import datetime
 # ============================================
 USERNAME = "dotm_milan"
 DSN = "10.250.252.201/DOTM"
-
-#BASE_DATA_FOLDER  # Ask user to choose base folder
-BASE_DATA_FOLDER = filedialog.askdirectory(title="Select Base Data Folder")
-if not BASE_DATA_FOLDER:
-    messagebox.showerror("Error", "No folder selected!")
-    raise SystemExit("No folder selected")
-
-OUTPUT_DIRS = {
-    "photo": os.path.join(BASE_DATA_FOLDER, "Photo"),
-    "sign1": os.path.join(BASE_DATA_FOLDER, "Sign1"),
-    "sign2": os.path.join(BASE_DATA_FOLDER, "Sign2")
-}
-
-# Create folders if they don’t exist
-for folder in OUTPUT_DIRS.values():
-    os.makedirs(folder, exist_ok=True)
-
-
-OUTPUT_DIRS = {
-    "photo": os.path.join(BASE_DATA_FOLDER, "Photo"),
-    "sign1": os.path.join(BASE_DATA_FOLDER, "Sign1"),
-    "sign2": os.path.join(BASE_DATA_FOLDER, "Sign2")
-}
-
 
 # ============================================
 # SQL QUERY TEMPLATE
@@ -75,10 +50,24 @@ JOIN edlvrs.license L ON LD.license_id = L.id
 JOIN edlvrs.applicant A ON L.applicant_id = A.id
 LEFT JOIN edlvrs.address AD ON A.id = AD.applicant_id AND AD.addresstype='PERM'
 WHERE LD.issuedate BETWEEN TO_DATE(:date_from,'DD-MM-YYYY') AND TO_DATE(:date_to,'DD-MM-YYYY')
-AND LD.licenseissueoffice_id = (SELECT id FROM edlvrs.licenseissueoffice WHERE name=:office)
-AND LD.expirydate = (SELECT MAX(expirydate) FROM EDLVRS.LICENSEDETAIL WHERE LICENSE_ID = L.ID AND ld.expirydate > ADD_MONTHS(SYSDATE, 6))
-AND LD.issuedate = (SELECT MAX(issuedate) FROM EDLVRS.LICENSEDETAIL WHERE LICENSE_ID = L.ID)
-AND L.printed <> 3
+
+AND LD.licenseissueoffice_id = (
+SELECT id FROM edlvrs.licenseissueoffice
+WHERE name=:office)
+
+AND LD.expirydate = (
+SELECT MAX(expirydate) 
+FROM EDLVRS.LICENSEDETAIL
+WHERE LICENSE_ID = L.ID 
+AND ld.expirydate > ADD_MONTHS(SYSDATE, 6))
+
+AND LD.issuedate = (
+SELECT MAX(issuedate)
+FROM EDLVRS.LICENSEDETAIL WHERE LICENSE_ID = L.ID)
+AND ad.addresstype = 'PERM'
+AND l.printed = '0'
+and l.licensestatus = 'VALID'
+and ld.accountstatus = 'VALID'
 """
 
 # ============================================
@@ -87,6 +76,7 @@ AND L.printed <> 3
 def save_blob(blob, file_path):
     with open(file_path, "wb") as f:
         f.write(blob.read())
+
 
 def export_blobphoto(conn, ids, sql_template, out_dir, label):
     if not ids:
@@ -104,6 +94,7 @@ def export_blobphoto(conn, ids, sql_template, out_dir, label):
         print(f"{label} saved: {path}")
     cursor.close()
 
+
 def export_blobsign(conn, ids, sql_template, out_dir, label):
     if not ids:
         print(f"No IDs for {label}")
@@ -120,6 +111,7 @@ def export_blobsign(conn, ids, sql_template, out_dir, label):
         print(f"{label} saved: {path}")
     cursor.close()
 
+
 # ============================================
 # GUI CLASS
 # ============================================
@@ -129,14 +121,26 @@ class LicenseGUI:
         root.title("Driving License Data Fetcher")
         root.geometry("1000x600")
 
-        # LOGIN
+        self.base_folder = None
+        self.output_dirs = {}
+        self.df = None
+
+        # ===== Base Folder Selection =====
+        folder_frame = tk.Frame(root)
+        folder_frame.pack(fill="x", pady=5)
+        tk.Label(folder_frame, text="Base Data Folder:").pack(side="left", padx=5)
+        self.folder_label = tk.Label(folder_frame, text="Not selected", fg="blue")
+        self.folder_label.pack(side="left", padx=5)
+        tk.Button(folder_frame, text="Select Folder", command=self.select_base_folder).pack(side="left", padx=5)
+
+        # ===== Login Frame =====
         login_frame = tk.LabelFrame(root, text="Oracle Login", padx=10, pady=10)
         login_frame.pack(fill="x")
         tk.Label(login_frame, text="Password:").grid(row=0, column=0)
         self.password_entry = tk.Entry(login_frame, show="*")
         self.password_entry.grid(row=0, column=1)
 
-        # FILTERS
+        # ===== Filters =====
         filter_frame = tk.LabelFrame(root, text="Filters", padx=10, pady=10)
         filter_frame.pack(fill="x")
         tk.Label(filter_frame, text="Select Office:").grid(row=0, column=0)
@@ -168,14 +172,34 @@ class LicenseGUI:
 
         tk.Button(filter_frame, text="Fetch Data", command=self.fetch_data).grid(row=3, column=0, columnspan=4, pady=10)
 
-        # TABLE
-        self.tree = ttk.Treeview(root)
-        self.tree.pack(fill="both", expand=True)
-        tk.Button(root, text="Export", command=self.export_csv).pack(pady=10)
+        # ===== Table =====
+        table_frame = tk.Frame(root)
+        table_frame.pack(fill="both", expand=True, padx=8, pady=(6,0))
+        self.tree = ttk.Treeview(table_frame, show="headings")
+        self.tree.pack(side="top", fill="both", expand=True)
 
-        self.df = None
+        # horizontal scrollbar
+        hsb = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
+        hsb.pack(side="bottom", fill="x")
+        self.tree.configure(xscrollcommand=hsb.set)
+        
+    
 
-    # Load office names
+    # ===== Base Folder Selection =====
+    def select_base_folder(self):
+        folder = filedialog.askdirectory(title="Select Base Data Folder")
+        if not folder:
+            messagebox.showerror("Error", "No folder selected!")
+            return
+        self.base_folder = folder
+        self.folder_label.config(text=f"Selected: {folder}")
+        # Create subfolders
+        self.output_dirs = {k: os.path.join(folder, k.capitalize()) for k in ["photo", "sign1", "sign2"]}
+        for path in self.output_dirs.values():
+            os.makedirs(path, exist_ok=True)
+        messagebox.showinfo("Success", "Base folder selected and subfolders created!")
+
+    # ===== Load Offices =====
     def load_offices(self):
         try:
             pwd = self.password_entry.get().strip()
@@ -188,18 +212,22 @@ class LicenseGUI:
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
-    # Fetch data and export blobs
+    # ===== Fetch Data =====
     def fetch_data(self):
+        if not self.output_dirs:
+            messagebox.showerror("Error", "Please select a base folder first!")
+            return
+
+        pwd = self.password_entry.get().strip()
+        office = self.office_combo.get().strip()
+        date_from = f"{self.from_day.get()}-{self.from_month.get()}-{self.from_year.get()}"
+        date_to = f"{self.to_day.get()}-{self.to_month.get()}-{self.to_year.get()}"
+
+        if not office:
+            messagebox.showwarning("Warning", "Select an office first!")
+            return
+
         try:
-            pwd = self.password_entry.get().strip()
-            office = self.office_combo.get().strip()
-            date_from = f"{self.from_day.get()}-{self.from_month.get()}-{self.from_year.get()}"
-            date_to = f"{self.to_day.get()}-{self.to_month.get()}-{self.to_year.get()}"
-
-            if not office:
-                messagebox.showwarning("Warning", "Select an office first!")
-                return
-
             conn = oracledb.connect(user=USERNAME, password=pwd, dsn=DSN)
             df = pd.read_sql(SQL_LICENSE_INFO, conn, params={"office": office, "date_from": date_from, "date_to": date_to})
 
@@ -209,7 +237,7 @@ class LicenseGUI:
 
             self.df = df
 
-            # Show in table
+            # Display in Treeview
             self.tree.delete(*self.tree.get_children())
             self.tree["columns"] = df.columns.tolist()
             self.tree["show"] = "headings"
@@ -221,7 +249,7 @@ class LicenseGUI:
 
             messagebox.showinfo("Done", f"Fetched {len(df)} records")
 
-            # Export blobs
+            # Export BLOBs
             ids_list = df["PRODUCTID"].dropna().astype(int).tolist()
 
             SQL_PHOTO = """
@@ -237,28 +265,29 @@ class LicenseGUI:
             JOIN edlvrs.dotm_user_biometric B ON LD.issue_authority_id = B.user_id
             WHERE A.id IN ({{IDS}}) AND B.signature IS NOT NULL AND LD.id = (SELECT MAX(id) FROM edlvrs.licensedetail WHERE license_id = L.id)
             """
-            export_blobphoto(conn, ids_list, SQL_PHOTO, OUTPUT_DIRS["photo"], "Photo")
-            export_blobsign(conn, ids_list, SQL_SIGN2, OUTPUT_DIRS["sign2"], "Signature2")
-            export_blobsign(conn, ids_list, SQL_SIGN1, OUTPUT_DIRS["sign1"], "Signature1")
+            export_blobphoto(conn, ids_list, SQL_PHOTO, self.output_dirs["photo"], "Photo")
+            export_blobsign(conn, ids_list, SQL_SIGN2, self.output_dirs["sign2"], "Signature2")
+            export_blobsign(conn, ids_list, SQL_SIGN1, self.output_dirs["sign1"], "Signature1")
 
             conn.close()
 
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
-    # Export Excel
+    # ===== Export CSV =====
     def export_csv(self):
         if self.df is None:
             messagebox.showwarning("No data", "Fetch data first!")
             return
         file = filedialog.asksaveasfilename(
-           defaultextension=".csv",
-           filetypes=[("CSV files", "*.csv")],
-             title="Save CSV file"
-             )
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")],
+            title="Save CSV file"
+        )
         if file:
-            self.df.to_csv(file, index=False,encoding="utf-8-sig")
-            messagebox.showinfo("Saved", "csv exported successfully!")
+            self.df.to_csv(file, index=False, encoding="utf-8-sig")
+            messagebox.showinfo("Saved", "CSV exported successfully!")
+
 
 # ============================================
 # RUN GUI
