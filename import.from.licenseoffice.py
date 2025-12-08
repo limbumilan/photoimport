@@ -171,7 +171,7 @@ class LicenseGUI:
         self.to_year.set("2024")
 
         tk.Button(filter_frame, text="Fetch Data", command=self.fetch_data).grid(row=3, column=0, columnspan=4, pady=10)
-
+        tk.Button(root, text="Export CSV", command=self.export_csv).pack(pady=10)
         # ===== Table =====
         table_frame = tk.Frame(root)
         table_frame.pack(fill="both", expand=True, padx=8, pady=(6,0))
