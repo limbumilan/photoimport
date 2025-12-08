@@ -1,3 +1,4 @@
+
 import oracledb
 import pandas as pd
 import tkinter as tk
@@ -170,7 +171,7 @@ class LicenseGUI:
         # TABLE
         self.tree = ttk.Treeview(root)
         self.tree.pack(fill="both", expand=True)
-        tk.Button(root, text="Export to Excel", command=self.export_excel).pack(pady=10)
+        tk.Button(root, text="Export", command=self.export_csv).pack(pady=10)
 
         self.df = None
 
@@ -246,14 +247,18 @@ class LicenseGUI:
             messagebox.showerror("Error", str(e))
 
     # Export Excel
-    def export_excel(self):
+    def export_csv(self):
         if self.df is None:
             messagebox.showwarning("No data", "Fetch data first!")
             return
-        file = filedialog.asksaveasfilename(defaultextension=".xlsx")
+        file = filedialog.asksaveasfilename(
+           defaultextension=".csv",
+           filetypes=[("CSV files", "*.csv")],
+             title="Save CSV file"
+             )
         if file:
-            self.df.to_excel(file, index=False)
-            messagebox.showinfo("Saved", "Excel exported successfully!")
+            self.df.to_csv(file, index=False)
+            messagebox.showinfo("Saved", "csv exported successfully!")
 
 # ============================================
 # RUN GUI
