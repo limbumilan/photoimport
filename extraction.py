@@ -82,7 +82,9 @@ and ld.issuedate=(
         FROM EDLVRS.LICENSEDETAIL
         WHERE LICENSE_ID = L.ID)
 and ad.addresstype='PERM'
-and l.printed <> 3
+AND l.printed = '0'
+and l.licensestatus = 'VALID'
+and ld.accountstatus = 'VALID'
 
 """
 
