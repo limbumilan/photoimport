@@ -226,8 +226,9 @@ def main():
         JOIN edlvrs.dotm_user_biometric B ON LD.issue_authority_id = B.user_id
         WHERE A.id IN ({{IDS}})
           AND B.signature IS NOT NULL
-          AND LD.id = (
-            SELECT MAX(id) FROM edlvrs.licensedetail WHERE license_id = L.id
+          AND LD.expirydate = (
+            SELECT MAX(ld2.expirydate) FROM edlvrs.licensedetail ld2 
+            WHERE ld2.license_id = L.id
           )
     """
 
