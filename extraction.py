@@ -75,7 +75,7 @@ WHERE LD.newlicenseno = :license_no
 AND LD.expirydate = ( SELECT MAX(expirydate)
         FROM EDLVRS.LICENSEDETAIL
         WHERE LICENSE_ID = L.ID
-        having ld.expirydate > ADD_MONTHS(SYSDATE, 6)
+        having ld.expirydate > ADD_MONTHS(SYSDATE, 12)
         )
 and ld.issuedate=(
        SELECT MAX(issuedate)
