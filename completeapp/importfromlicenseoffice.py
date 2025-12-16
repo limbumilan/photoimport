@@ -1,11 +1,12 @@
-
 import oracledb
 import pandas as pd
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-import os
+import customtkinter as ctk
+from tkinter import messagebox
 from datetime import datetime
-
+import os
+from PIL import Image
+from baselanding import BaseLanding
+from tkinter import messagebox, filedialog, ttk
 # ============================================
 # CONFIG
 # ============================================
@@ -116,99 +117,132 @@ def export_blobsign(conn, ids, sql_template, out_dir, label):
 # ============================================
 # GUI CLASS
 # ============================================
-class LicenseGUI:
+
+
     
-    def __init__(self, root):
-        
-        self.root = root
-        root.title("Demo Personalization ware")
-        root.geometry("1100x650")
-        root.configure(bg="#87CEEB")  # sky blue background
+
+class RegularLicenseExportLanding(BaseLanding):
+    def __init__(self, parent, on_back):
+        super().__init__(parent, on_back=on_back)
+        self.configure(fg_color="#F5F8FF")
 
         self.base_folder = None
         self.output_dirs = {}
         self.df = None
 
-        # ===== Base Folder Selection =====
-        folder_frame = tk.Frame(root, bg="#87CEEB")
-        folder_frame.pack(fill="x", pady=5)
-        tk.Label(folder_frame, text="Base Data Folder:", bg="#87CEEB", fg="#003366", font=("Arial", 10, "bold")).pack(side="left", padx=5)
-        self.folder_label = tk.Label(folder_frame, text="Not selected", fg="#003366", bg="#87CEEB", font=("Arial", 10))
-        self.folder_label.pack(side="left", padx=5)
-        tk.Button(folder_frame, text="Select Folder", command=self.select_base_folder, bg="#4682B4", fg="white").pack(side="left", padx=5)
+        # ================= Header =================
+        header = ctk.CTkFrame(self, fg_color="#1E3A8A", height=60)
+        header.pack(fill="x",side="top")
+        header.pack_propagate(False)
+        ctk.CTkLabel(
+            header,
+            text="Regular License Export",
+            text_color="white",
+            font=("Arial", 18, "bold")
+        ).pack(side="top", padx=10)
 
-        # ===== Login Frame =====
-        login_frame = tk.LabelFrame(root, text="Oracle Login", padx=10, pady=10, bg="#87CEEB", fg="#003366", font=("Arial", 10, "bold"))
-        login_frame.pack(fill="x", pady=5)
-        tk.Label(login_frame, text="Password:", bg="#87CEEB", fg="#003366").grid(row=0, column=0)
-        self.password_entry = tk.Entry(login_frame, show="*")
-        self.password_entry.grid(row=0, column=1)
+        # ================= Base Folder =================
+        folder_frame = ctk.CTkFrame(self)
+        folder_frame.pack(fill="x", padx=15, pady=6)
 
-        # ===== Filters =====
-        filter_frame = tk.LabelFrame(root, text="Filters", padx=10, pady=10, bg="#87CEEB", fg="#003366", font=("Arial", 10, "bold"))
-        filter_frame.pack(fill="x", pady=5)
-        tk.Label(filter_frame, text="Select Office:", bg="#87CEEB", fg="#003366").grid(row=0, column=0)
-        self.office_combo = ttk.Combobox(filter_frame, width=40)
-        self.office_combo.grid(row=0, column=1)
-        tk.Button(filter_frame, text="Load Offices", command=self.load_offices, bg="#4682B4", fg="white").grid(row=0, column=2, padx=5)
+        ctk.CTkLabel(folder_frame, text="Base Folder:").pack(side="left")
+        self.folder_label = ctk.CTkLabel(folder_frame, text="Not selected")
+        self.folder_label.pack(side="left", padx=10)
+        ctk.CTkButton(
+            folder_frame,
+            text="Select Folder",
+            command=self.select_base_folder
+        ).pack(side="left")
 
-        tk.Label(filter_frame, text="From Date:", bg="#87CEEB", fg="#003366").grid(row=1, column=0)
-        self.from_day = ttk.Combobox(filter_frame, values=[f"{i:02d}" for i in range(1,32)], width=5)
-        self.from_day.grid(row=1, column=1)
+        # ================= Login =================
+        login_frame = ctk.CTkFrame(self)
+        login_frame.pack(fill="x", padx=15, pady=6)
+
+        ctk.CTkLabel(login_frame, text="Oracle Password:").grid(row=0, column=0, sticky="w")
+        self.password_entry = ctk.CTkEntry(login_frame, show="*", width=220)
+        self.password_entry.grid(row=0, column=1, padx=10)
+
+        # ================= Filters =================
+        filter_frame = ctk.CTkFrame(self)
+        filter_frame.pack(fill="x", padx=15, pady=6)
+
+        # Office
+        ctk.CTkLabel(filter_frame, text="License Office:").grid(row=0, column=0, sticky="w")
+        self.office_combo = ctk.CTkComboBox(filter_frame, width=260)
+        self.office_combo.grid(row=0, column=1, padx=5)
+        ctk.CTkButton(filter_frame, text="Load Offices", command=self.load_offices).grid(row=0, column=2, padx=5)
+
+        # From Date ComboBoxes
+        ctk.CTkLabel(filter_frame, text="From Date:").grid(row=1, column=0, sticky="w")
+        self.from_day = ctk.CTkComboBox(filter_frame, values=[f"{i:02d}" for i in range(1, 32)], width=60)
         self.from_day.set("01")
-        self.from_month = ttk.Combobox(filter_frame, values=[f"{i:02d}" for i in range(1,13)], width=5)
-        self.from_month.grid(row=1, column=2)
+        self.from_day.grid(row=1, column=1, sticky="w")
+        self.from_month = ctk.CTkComboBox(filter_frame, values=[f"{i:02d}" for i in range(1, 13)], width=60)
         self.from_month.set("01")
-        self.from_year = ttk.Combobox(filter_frame, values=[str(y) for y in range(2010,2035)], width=7)
-        self.from_year.grid(row=1, column=3)
+        self.from_month.grid(row=1, column=1, padx=(70,0))
+        self.from_year = ctk.CTkComboBox(filter_frame, values=[str(y) for y in range(2010,2036)], width=80)
         self.from_year.set("2024")
+        self.from_year.grid(row=1, column=1, padx=(140,0))
 
-        tk.Label(filter_frame, text="To Date:", bg="#87CEEB", fg="#003366").grid(row=2, column=0)
-        self.to_day = ttk.Combobox(filter_frame, values=[f"{i:02d}" for i in range(1,32)], width=5)
-        self.to_day.grid(row=2, column=1)
+        # To Date ComboBoxes
+        ctk.CTkLabel(filter_frame, text="To Date:").grid(row=2, column=0, sticky="w")
+        self.to_day = ctk.CTkComboBox(filter_frame, values=[f"{i:02d}" for i in range(1, 32)], width=60)
         self.to_day.set("01")
-        self.to_month = ttk.Combobox(filter_frame, values=[f"{i:02d}" for i in range(1,13)], width=5)
-        self.to_month.grid(row=2, column=2)
+        self.to_day.grid(row=2, column=1, sticky="w")
+        self.to_month = ctk.CTkComboBox(filter_frame, values=[f"{i:02d}" for i in range(1, 13)], width=60)
         self.to_month.set("01")
-        self.to_year = ttk.Combobox(filter_frame, values=[str(y) for y in range(2010,2035)], width=7)
-        self.to_year.grid(row=2, column=3)
+        self.to_month.grid(row=2, column=1, padx=(70,0))
+        self.to_year = ctk.CTkComboBox(filter_frame, values=[str(y) for y in range(2010,2036)], width=80)
         self.to_year.set("2024")
+        self.to_year.grid(row=2, column=1, padx=(140,0))
 
-        tk.Button(filter_frame, text="Fetch Data", command=self.fetch_data, bg="#00BFFF", fg="white").grid(row=3, column=0, columnspan=4, pady=10)
+        # Fetch Button
+        ctk.CTkButton(filter_frame, text="Fetch Data", command=self.fetch_data).grid(row=3, column=0, columnspan=3, pady=10)
 
-        # ===== Table =====
-        table_frame = tk.Frame(root, bg="#87CEEB")
-        table_frame.pack(fill="both", expand=True, padx=8, pady=5)
+        # ================= Table =================
+        table_frame = ctk.CTkFrame(self)
+        table_frame.pack(fill="both", expand=True, padx=15, pady=6)
+
         self.tree = ttk.Treeview(table_frame, show="headings")
-        self.tree.pack(side="top", fill="both", expand=True)
+        self.tree.pack(side="left", fill="both", expand=True)
+
+        # Scrollbars
+        vsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        vsb.pack(side="right", fill="y")
         hsb = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
         hsb.pack(side="bottom", fill="x")
-        self.tree.configure(xscrollcommand=hsb.set)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
-        # ===== Actions =====
-        action_frame = tk.Frame(root, bg="#00FF00")
-        action_frame.pack(fill="x", padx=10, pady=5)
-        tk.Button(action_frame, text="Export CSV", command=self.export_csv, bg="#1E90FF", fg="black").pack(side="left", padx=5)
-        self.status_label = tk.Label(action_frame, text="Status: Ready", anchor="w", bg="#87CEEB", fg="#003366")
+        # ================= Actions =================
+        action_frame = ctk.CTkFrame(self)
+        action_frame.pack(fill="x",side="bottom", padx=15, pady=6)
+        action_frame.pack_propagate(False) 
+        #csv button and status label
+
+        ctk.CTkButton(action_frame,
+                       text="Export CSV", 
+                       command=self.export_csv,
+                       width=120,
+                     fg_color="#1E90FF",
+                     text_color="white"
+                       ).pack(side="left",padx=10,pady=5)
+        self.status_label = ctk.CTkLabel(action_frame, text="Status: Ready")
         self.status_label.pack(side="left", padx=20)
 
-        
-    
-    
-
-    # ===== Base Folder Selection =====
+    # ================= Helper Methods =================   
     def select_base_folder(self):
-        folder = filedialog.askdirectory(title="Select Base Data Folder")
+        folder = filedialog.askdirectory(title="Select Base Folder")
         if not folder:
-            messagebox.showerror("Error", "No folder selected!")
             return
         self.base_folder = folder
-        self.folder_label.config(text=f"Selected: {folder}")
-        # Create subfolders
-        self.output_dirs = {k: os.path.join(folder, k.capitalize()) for k in ["photo", "sign1", "sign2"]}
-        for path in self.output_dirs.values():
-            os.makedirs(path, exist_ok=True)
-        messagebox.showinfo("Success", "Base folder selected and subfolders created!")
+        self.folder_label.configure(text=folder)
+        self.output_dirs = {
+            "photo": os.path.join(folder, "Photo"),
+            "sign1": os.path.join(folder, "Sign1"),
+            "sign2": os.path.join(folder, "Sign2"),
+        }
+        for p in self.output_dirs.values():
+            os.makedirs(p, exist_ok=True)
 
     # ===== Load Offices =====
     def load_offices(self):
@@ -274,7 +308,10 @@ class LicenseGUI:
             JOIN edlvrs.license L ON A.id = L.applicant_id
             JOIN edlvrs.licensedetail LD ON L.id = LD.license_id
             JOIN edlvrs.dotm_user_biometric B ON LD.issue_authority_id = B.user_id
-            WHERE A.id IN ({{IDS}}) AND B.signature IS NOT NULL AND LD.id = (SELECT MAX(id) FROM edlvrs.licensedetail WHERE license_id = L.id)
+            WHERE A.id IN ({{IDS}}) AND B.signature IS NOT NULL AND 
+            LD.expirydate = (
+            SELECT MAX(expirydate) FROM edlvrs.licensedetail  ld
+            WHERE ld.license_id = L.id)
             """
             export_blobphoto(conn, ids_list, SQL_PHOTO, self.output_dirs["photo"], "Photo")
             export_blobsign(conn, ids_list, SQL_SIGN2, self.output_dirs["sign2"], "Signature2")
@@ -303,6 +340,3 @@ class LicenseGUI:
 # ============================================
 # RUN GUI
 # ============================================
-root = tk.Tk()
-app = LicenseGUI(root)
-root.mainloop()

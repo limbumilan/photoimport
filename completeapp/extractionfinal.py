@@ -5,6 +5,7 @@ from tkinter import messagebox
 from datetime import datetime
 import os
 from PIL import Image
+from baselanding import BaseLanding
 
 # ================= CONFIG =================
 USERNAME = "dotm_milan"
@@ -136,27 +137,16 @@ def export_blobs(conn, ids, sql, out_dir, ext, log):
     cur.close()
 
 # ================= LANDING PAGE =================
-class LicenseExportLanding(ctk.CTkFrame):
+class LicenseExportLanding(BaseLanding):
 
     def __init__(self, parent, on_back):
-        super().__init__(parent)
-        self.on_back = on_back
-        ctk.CTkButton(self, text="← Back", command=self.on_back).pack(pady=10, padx=10, anchor="w")
-
-        # Landing page content
-        ctk.CTkLabel(self, text="License Export Page", font=("Arial", 18, "bold")).pack(pady=20)
-        ctk.CTkLabel(self, text="Here you can run the license export tool.").pack(pady=10)
-
-        # Example: export button
-        ctk.CTkButton(self, text="Run Export").pack(pady=10)
+        super().__init__(parent, on_back)
         self.configure(fg_color="#F5F8FF")
 
         # ---------- HEADER ----------
         header = ctk.CTkFrame(self, fg_color="#1E3A8A", height=60)
         header.pack(fill="x")
         header.pack_propagate(False)
-
-        
 
         ctk.CTkLabel(
             header,
@@ -165,32 +155,35 @@ class LicenseExportLanding(ctk.CTkFrame):
             font=("Arial", 18, "bold")
         ).pack(side="left", padx=10)
 
-        # ---------- CONTENT ----------
-        body = ctk.CTkFrame(self, fg_color="transparent")
-        body.pack(fill="both", expand=True, padx=20, pady=20)
+        # move the base body below header (BaseLanding packs body early)
+        try:
+            self.body.pack_forget()
+        except Exception:
+            pass
+        self.body.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # Logo
-      
-        #ctk.CTkLabel(body, image=self.logo_img, text="").pack(pady=5)
+        # Page heading and description
+        ctk.CTkLabel(self.body, text="License Export Page", font=("Arial", 18, "bold")).pack(pady=20)
+        ctk.CTkLabel(self.body, text="Here you can run the license export tool.").pack(pady=10)
 
         # Inputs
-        ctk.CTkLabel(body, text="License Numbers").pack(anchor="w")
-        self.license_box = ctk.CTkTextbox(body, height=80)
+        ctk.CTkLabel(self.body, text="License Numbers").pack(anchor="w")
+        self.license_box = ctk.CTkTextbox(self.body, height=80)
         self.license_box.pack(fill="x", pady=5)
 
-        ctk.CTkLabel(body, text="Oracle Password").pack(anchor="w")
-        self.password = ctk.CTkEntry(body, show="*")
+        ctk.CTkLabel(self.body, text="Oracle Password").pack(anchor="w")
+        self.password = ctk.CTkEntry(self.body, show="*")
         self.password.pack(fill="x", pady=5)
 
         ctk.CTkButton(
-            body,
+            self.body,
             text="Run Export",
             height=40,
             command=self.run_export
         ).pack(pady=10)
 
-        ctk.CTkLabel(body, text="Log").pack(anchor="w")
-        self.log_box = ctk.CTkTextbox(body, height=200)
+        ctk.CTkLabel(self.body, text="Log").pack(anchor="w")
+        self.log_box = ctk.CTkTextbox(self.body, height=200)
         self.log_box.pack(fill="both", expand=True)
 
     # ---------- LOG ----------

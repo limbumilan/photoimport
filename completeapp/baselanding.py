@@ -8,22 +8,25 @@ class BaseLanding(ctk.CTkFrame):
         self.parent = parent
         self.on_back = on_back
 
-        # Container frame
+        # Main content container
         self.body = ctk.CTkFrame(self, fg_color="#FFFFFF")
         self.body.pack(fill="both", expand=True)
 
-        # Back button at top-left
+        # Footer to hold the Back button at the bottom
+        self.footer = ctk.CTkFrame(self, fg_color="transparent")
+        self.footer.pack(fill="x", side="bottom")
+
         self.back_btn = ctk.CTkButton(
-            self.body,
+            self.footer,
             text="← Back",
-            width=100,
-            height=35,
+            width=140,
+            height=36,
             fg_color="#1E3A8A",
             hover_color="#274690",
             text_color="white",
             command=self.go_back
         )
-        self.back_btn.pack(anchor="nw", padx=15, pady=15)
+        self.back_btn.pack(pady=12)
 
     def go_back(self):
         """Call the callback to return to main content."""
