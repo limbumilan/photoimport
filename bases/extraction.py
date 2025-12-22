@@ -10,12 +10,12 @@ import getpass
 USERNAME = "dotm_milan"
 DSN = "10.250.252.201/DOTM"
 
-BASE_DATA_FOLDER = r"C:\Users\HP\Desktop\DATA"
+BASE_DATA_FOLDER = Path.home()/ "Desktop" / "DATA"
 
 OUTPUT_DIRS = {
-    "photo": os.path.join(BASE_DATA_FOLDER, "Photo"),
-    "sign1": os.path.join(BASE_DATA_FOLDER, "Sign1"),
-    "sign2": os.path.join(BASE_DATA_FOLDER, "Sign2")
+    "photo": BASE_DATA_FOLDER / "Photo",
+    "sign1": BASE_DATA_FOLDER /"Sign1",
+    "sign2": BASE_DATA_FOLDER / "Sign2"
 }
 
 # Create folders if missing
