@@ -31,7 +31,18 @@ SELECT
     A.PASSPORTNUMBER AS Passport_No,
     '@photo\\' || A.ID || '.tif' AS Photo,
     A.MOBILENUMBER AS Contact_No,
-    (SELECT name FROM edlvrs.licenseissueoffice WHERE ID = ld.licenseissueoffice_id) AS License_Office,
+
+    
+    (SELECT MAX(lio.name) KEEP (DENSE_RANK FIRST ORDER BY ld2.issuedate)
+ FROM edlvrs.licensedetail ld2
+ JOIN edlvrs.licenseissueoffice lio 
+   ON lio.id = ld2.licenseissueoffice_id
+ WHERE ld2.newlicenseno = ld.newlicenseno
+) AS License_Office,
+    
+
+
+    
     A.WITNESSFIRSTNAME || ' ' || NVL(A.WITNESSMIDDLENAME,'') || ' ' || NVL(A.WITNESSLASTNAME,'') AS FH_Name,
     (SELECT TYPE FROM edlvrs.bloodgroup WHERE ID = A.BLOODGROUP_ID) AS BG,
     (SELECT name FROM edlvrs.district WHERE ID = AD.district_id) AS Region,
@@ -58,9 +69,9 @@ WHERE name=:office)
 
 AND LD.expirydate = (
 SELECT MAX(expirydate) 
-FROM EDLVRS.LICENSEDETAIL
-WHERE LICENSE_ID = L.ID 
-AND ld.expirydate > ADD_MONTHS(SYSDATE, 6))
+FROM EDLVRS.LICENSEDETAIL ld2
+WHERE ld2.LICENSE_ID = L.ID 
+AND ld2.expirydate > ADD_MONTHS(SYSDATE, 12))
 
 AND LD.issuedate = (
 SELECT MAX(issuedate)
