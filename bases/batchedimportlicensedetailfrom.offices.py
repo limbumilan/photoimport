@@ -289,6 +289,10 @@ class LicenseGUI:
           if df is None or df.empty:
             messagebox.showinfo("No Data", "No records found for selected filters.")
             return
+        
+          df = df[~df["Citizenship_No"].str.contains("ANUSHUCHI", na=False)]
+          df = df[df["Given_Name"].str.len() + df["Surname"].str.len() < 30]
+
 
           df=df.drop_duplicates(subset="PRODUCTID", keep="first")
 
