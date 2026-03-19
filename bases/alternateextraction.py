@@ -236,7 +236,7 @@ def main():
         WHERE A.id IN ({{IDS}})
           AND B.signature IS NOT NULL
           AND LD.expirydate = (
-              SELECT MIN(ld2.expirydate) FROM edlvrs.licensedetail ld2 WHERE ld2.license_id = L.id
+              SELECT MAX(ld2.expirydate) FROM edlvrs.licensedetail ld2 WHERE ld2.license_id = L.id
           )
     """
 
