@@ -73,9 +73,10 @@ FROM EDLVRS.LICENSEDETAIL ld2
 WHERE ld2.LICENSE_ID = L.ID 
 AND ld2.expirydate > ADD_MONTHS(SYSDATE, 12))
 
-AND LD.issuedate = (
-SELECT MAX(issuedate)
-FROM EDLVRS.LICENSEDETAIL WHERE LICENSE_ID = L.ID)
+
+
+
+
 AND ad.addresstype = 'PERM'
 AND l.printed = '0'
 and l.licensestatus = 'VALID'
@@ -117,13 +118,25 @@ def export_blobs(conn, ids, sql_template, out_dir, extension, batch_size=500):
         cursor.execute(sql, bind_vars)
         rows = cursor.fetchall()
         for aid, blob in rows:
-            path = os.path.join(out_dir, f"{aid}{extension}")
-            with open(path, "wb") as f:
-                f.write(blob.read() if hasattr(blob, "read") else blob)
+            
+            file_path = os.path.join(out_dir, f"{aid}{extension}")
+            temp_path = file_path + ".tmp"
+
+            # Skip already extracted files
+            if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                continue
+
+            # Write blob safely to temp file first
+            blob_data = blob.read() if hasattr(blob, "read") else blob
+            with open(temp_path, "wb") as f:
+                f.write(blob_data)
+
+            # Rename temp to final file
+            os.replace(temp_path, file_path)
+
         cursor.close()
         print(f"Batch {batch_index + 1}/{total_batches} exported to {out_dir}")
-
-    
+                
 
 
 # ============================================
@@ -204,6 +217,7 @@ class LicenseGUI:
         tk.Button(action_frame, text="Export CSV", command=self.export_csv, bg="#1E90FF", fg="black").pack(side="left", padx=5)
         self.status_label = tk.Label(action_frame, text="Status: Ready", anchor="w", bg="#87CEEB", fg="#003366")
         self.status_label.pack(side="left", padx=20)
+        tk.Button(action_frame, text="Clear Table", command=self.clear_table, bg="#FF6347", fg="white").pack(side="left", padx=5)
 
         
     
@@ -238,9 +252,10 @@ class LicenseGUI:
 
     # ===== Fetch Data =====
     def fetch_data(self):
+
         if not self.output_dirs:
-            messagebox.showerror("Error", "Please select a base folder first!")
-            return
+           messagebox.showerror("Error", "Please select a base folder first!")
+           return
 
         pwd = self.password_entry.get().strip()
         office = self.office_combo.get().strip()
@@ -248,56 +263,125 @@ class LicenseGUI:
         date_to = f"{self.to_day.get()}-{self.to_month.get()}-{self.to_year.get()}"
 
         if not office:
-            messagebox.showwarning("Warning", "Select an office first!")
-            return
+           messagebox.showwarning("Warning", "Select an office first!")
+           return
 
         try:
-            conn = oracledb.connect(user=USERNAME, password=pwd, dsn=DSN)
-            df = pd.read_sql(SQL_LICENSE_INFO, conn, params={"office": office, "date_from": date_from, "date_to": date_to})
+        # 🔴 CLEAN OLD TEMP FILES (important)
+          for path in self.output_dirs.values():
+            for f in os.listdir(path):
+                if f.endswith(".tmp"):
+                    os.remove(os.path.join(path, f))
 
-            if df.empty:
-                messagebox.showinfo("No Data", "No records found for selected filters.")
-                return
+          conn = oracledb.connect(user=USERNAME, password=pwd, dsn=DSN)
 
-            self.df = df
+          self.status_label.config(text="Fetching data...")
+          self.root.update_idletasks()
 
-            # Display in Treeview
-            self.tree.delete(*self.tree.get_children())
-            self.tree["columns"] = df.columns.tolist()
-            self.tree["show"] = "headings"
-            for c in df.columns:
-                self.tree.heading(c, text=c)
-                self.tree.column(c, width=150)
-            for row in df.itertuples(index=False):
-                self.tree.insert("", "end", values=row)
+          df = pd.read_sql(SQL_LICENSE_INFO, conn, params={
+            "office": office,
+            "date_from": date_from,
+            "date_to": date_to
+          })
 
-            messagebox.showinfo("Done", f"Fetched {len(df)} records")
+          
 
-            # Export BLOBs
-            ids_list = df["PRODUCTID"].dropna().astype(int).tolist()
+          if df is None or df.empty:
+            messagebox.showinfo("No Data", "No records found for selected filters.")
+            return
 
-            SQL_PHOTO = """
-            SELECT applicant_id, photograph FROM edlvrs.applicant_biometric WHERE applicant_id IN ({{IDS}}) AND photograph IS NOT NULL
-            """
-            SQL_SIGN2 = """
-            SELECT applicant_id, signature FROM edlvrs.applicant_biometric WHERE applicant_id IN ({{IDS}}) AND signature IS NOT NULL
-            """
-            SQL_SIGN1 = """
-            SELECT A.ID, B.signature FROM edlvrs.applicant A
-            JOIN edlvrs.license L ON A.id = L.applicant_id
-            JOIN edlvrs.licensedetail LD ON L.id = LD.license_id
-            JOIN edlvrs.dotm_user_biometric B ON LD.issue_authority_id = B.user_id
-            WHERE A.id IN ({{IDS}}) AND B.signature IS NOT NULL AND LD.id = (SELECT MAX(id) FROM edlvrs.licensedetail WHERE license_id = L.id)
-            """
-            export_blobs(conn, ids_list, SQL_PHOTO, self.output_dirs["photo"], ".tif")
-            export_blobs(conn, ids_list, SQL_SIGN2, self.output_dirs["sign2"], ".jpg")
-            export_blobs(conn, ids_list, SQL_SIGN1, self.output_dirs["sign1"], ".jpg")
+          df=df.drop_duplicates(subset="PRODUCTID", keep="first")
 
-            conn.close()
+          self.df = df
+
+        # ===== Display Table =====
+          self.tree.delete(*self.tree.get_children())
+          self.tree["columns"] = df.columns.tolist()
+          self.tree["show"] = "headings"
+
+          for c in df.columns:
+            self.tree.heading(c, text=c)
+            self.tree.column(c, width=150)
+
+          for row in df.itertuples(index=False):
+            self.tree.insert("", "end", values=row)
+
+          total_records = len(df)
+          self.status_label.config(text=f"Fetched {total_records} records")
+          self.root.update_idletasks()
+
+        # ===== FILTER IDS (SKIP EXISTING FILES BEFORE DB HIT) =====
+          ids_list = df["PRODUCTID"].dropna().astype(int).tolist()
+
+          ids_to_process=[]
+
+          for aid in ids_list:
+              photo_path = os.path.join(self.output_dirs["photo"], f"{aid}.tif")
+              sign1_path = os.path.join(self.output_dirs["sign1"], f"{aid}.jpg")
+              sign2_path = os.path.join(self.output_dirs["sign2"], f"{aid}.jpg")
+
+    # Check if ALL files exist and are valid
+              photo_ok = os.path.exists(photo_path) and os.path.getsize(photo_path) > 0
+              sign1_ok = os.path.exists(sign1_path) and os.path.getsize(sign1_path) > 0
+              sign2_ok = os.path.exists(sign2_path) and os.path.getsize(sign2_path) > 0
+
+    # Only skip if ALL exist
+              if not (photo_ok and sign1_ok and sign2_ok):
+                ids_to_process.append(aid)
+          
+             
+
+          skipped = len(ids_list) - len(ids_to_process)
+
+          self.status_label.config(
+          text=f"Total: {len(ids_list)} | Skipping: {skipped} | Processing: {len(ids_to_process)}"
+            )
+          self.root.update_idletasks()
+
+          if not ids_to_process:
+            messagebox.showinfo("Done", "All files already extracted ✅")
+            return
+
+        # ===== BLOB EXPORT =====
+          SQL_PHOTO = """
+          SELECT applicant_id, photograph FROM edlvrs.applicant_biometric 
+          WHERE applicant_id IN ({{IDS}}) AND photograph IS NOT NULL
+          """
+
+          SQL_SIGN2 = """
+          SELECT applicant_id, signature FROM edlvrs.applicant_biometric 
+          WHERE applicant_id IN ({{IDS}}) AND signature IS NOT NULL
+          """
+
+          SQL_SIGN1 = """
+          SELECT A.ID, B.signature 
+          FROM edlvrs.applicant A
+          JOIN edlvrs.license L ON A.id = L.applicant_id
+          JOIN edlvrs.licensedetail LD ON L.id = LD.license_id
+          JOIN edlvrs.dotm_user_biometric B ON LD.issue_authority_id = B.user_id
+          WHERE A.id IN ({{IDS}}) 
+          AND B.signature IS NOT NULL 
+          AND LD.expirydate = (
+            SELECT MIN(ld3.expirydate) FROM edlvrs.licensedetail ld3 WHERE ld3.license_id = L.id
+          )
+          """
+
+        # 🔥 Process only missing IDs
+          export_blobs(conn, ids_to_process, SQL_PHOTO, self.output_dirs["photo"], ".tif")
+          export_blobs(conn, ids_to_process, SQL_SIGN2, self.output_dirs["sign2"], ".jpg")
+          export_blobs(conn, ids_to_process, SQL_SIGN1, self.output_dirs["sign1"], ".jpg")
+
+          
+          
+          conn.close()
+
+          self.status_label.config(text="Completed ✅")
+          messagebox.showinfo("Done", "Extraction completed successfully!")
+        
 
         except Exception as e:
-            messagebox.showerror("Error", str(e))
-
+          messagebox.showerror("Error", str(e))
+    
     # ===== Export CSV =====
     def export_csv(self):
         if self.df is None:
@@ -311,6 +395,13 @@ class LicenseGUI:
         if file:
             self.df.to_csv(file, index=False, encoding="utf-8-sig")
             messagebox.showinfo("Saved", "CSV exported successfully!")
+            
+    def clear_table(self):
+        confirm = messagebox.askyesno("Confirm", "Clear all data from table?")
+        if confirm:
+           self.tree.delete(*self.tree.get_children())
+           self.df = None
+           self.status_label.config(text="Table cleared")
 
 
 # ============================================
