@@ -289,14 +289,32 @@ class LicenseGUI:
           if df is None or df.empty:
             messagebox.showinfo("No Data", "No records found for selected filters.")
             return
-        
-          df = df[~df["Citizenship_No"].str.contains("ANUSHUCHI", na=False)]
-          df = df[df["Given_Name"].str.len() + df["Surname"].str.len() < 30]
+          filtered_out_ids = []
 
+        # 🔹 Remove unwanted Citizenship_No containing 'ANUSHUCHI'
+          mask_citizen = df["CITIZENSHIP_NO"].str.contains("ANUSHUCHI", na=False)
+          filtered_out_ids.extend(df.loc[mask_citizen, "PRODUCTID"].tolist())
 
-          df=df.drop_duplicates(subset="PRODUCTID", keep="first")
+        # 🔹 Remove rows where Given_Name + Surname length >= 30
+          mask_name_length = (df["GIVEN_NAME"].str.len() + df["SURNAME"].str.len()) >= 30
+          filtered_out_ids.extend(df.loc[mask_name_length, "PRODUCTID"].tolist())
+
+        # 🔹 Drop filtered rows from main dataframe
+          df = df[~mask_citizen & ~mask_name_length]
+
+        # 🔹 Drop duplicate PRODUCTID
+          df = df.drop_duplicates(subset="PRODUCTID", keep="first")
 
           self.df = df
+
+          if filtered_out_ids:
+            messagebox.showwarning(
+                "Skipped Applicants",
+                f"{len(filtered_out_ids)} applicant(s) skipped due to invalid data.\n"
+                f"IDs: {filtered_out_ids}"
+            )
+        
+          
 
         # ===== Display Table =====
           self.tree.delete(*self.tree.get_children())
