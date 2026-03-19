@@ -186,9 +186,10 @@ def main():
         try:
             df = pd.read_sql(SQL_LICENSE_INFO, conn, params={"license_no": lic})
             
-            if df.empty:
+            if df is None or df.empty:
                 print(f"⚠ No data for {lic}")
                 continue
+            df=df.drop_duplicates(subset="PRODUCTID", keep="first")
 
             ids = df["PRODUCTID"].dropna().astype(int).tolist()
             applicant_ids.update(ids)
