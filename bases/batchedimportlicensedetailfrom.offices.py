@@ -65,7 +65,8 @@ WHERE LD.issuedate BETWEEN TO_DATE(:date_from,'DD-MM-YYYY') AND TO_DATE(:date_to
 
 AND LD.licenseissueoffice_id = (
 SELECT id FROM edlvrs.licenseissueoffice
-WHERE name=:office)
+WHERE name=:office 
+)
 
 AND LD.expirydate = (
 SELECT MAX(expirydate) 
@@ -73,8 +74,11 @@ FROM EDLVRS.LICENSEDETAIL ld2
 WHERE ld2.LICENSE_ID = L.ID 
 AND ld2.expirydate > ADD_MONTHS(SYSDATE, 12))
 
-
-
+AND LD.issuedate = (
+SELECT MAX(issuedate) 
+FROM EDLVRS.LICENSEDETAIL ld2
+WHERE ld2.LICENSE_ID = L.ID 
+)
 
 
 AND ad.addresstype = 'PERM'
@@ -90,53 +94,52 @@ def save_blob(blob, file_path):
     with open(file_path, "wb") as f:
         f.write(blob.read())
 
-def export_blobs(conn, ids, sql_template, out_dir, extension, batch_size=500):
-    """
-    Export BLOBs in batches to avoid Oracle IN() limit (1000).
-    - conn: active Oracle connection
-    - ids: list of applicant IDs
-    - sql_template: SQL with {{IDS}} placeholder
-    - out_dir: folder to save files
-    - extension: file extension, e.g., ".tif" or ".jpg"
-    - batch_size: max IDs per batch
-    """
+def export_blobs(conn, ids, sql_template, out_dir, extension, valid_ids, batch_size=500):
+
     if not ids:
         print(f"No IDs to export for {out_dir}")
         return
 
     from math import ceil
-
     total_batches = ceil(len(ids) / batch_size)
 
     for batch_index in range(total_batches):
         batch_ids = ids[batch_index * batch_size : (batch_index + 1) * batch_size]
+
         placeholders = ",".join([f":id{i}" for i in range(len(batch_ids))])
         bind_vars = {f"id{i}": val for i, val in enumerate(batch_ids)}
+
         sql = sql_template.replace("{{IDS}}", placeholders)
 
         cursor = conn.cursor()
-        cursor.execute(sql, bind_vars)
-        rows = cursor.fetchall()
-        for aid, blob in rows:
-            
-            file_path = os.path.join(out_dir, f"{aid}{extension}")
-            temp_path = file_path + ".tmp"
+        try:
+            cursor.execute(sql, bind_vars)
 
-            # Skip already extracted files
-            if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-                continue
+            for aid, blob in cursor:
 
-            # Write blob safely to temp file first
-            blob_data = blob.read() if hasattr(blob, "read") else blob
-            with open(temp_path, "wb") as f:
-                f.write(blob_data)
+                # 🔴 STRICT VALIDATION (MAIN FIX)
+                if aid not in valid_ids:
+                    print(f"⚠️ Skipping unexpected ID: {aid}")
+                    continue
 
-            # Rename temp to final file
-            os.replace(temp_path, file_path)
+                file_path = os.path.join(out_dir, f"{aid}{extension}")
+                temp_path = file_path + ".tmp"
 
-        cursor.close()
+                if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                    continue
+
+                blob_data = blob.read() if hasattr(blob, "read") else blob
+
+                with open(temp_path, "wb") as f:
+                    f.write(blob_data)
+
+                os.replace(temp_path, file_path)
+
+        finally:
+            cursor.close()
+
         print(f"Batch {batch_index + 1}/{total_batches} exported to {out_dir}")
-                
+
 
 
 # ============================================
@@ -334,6 +337,7 @@ class LicenseGUI:
 
         # ===== FILTER IDS (SKIP EXISTING FILES BEFORE DB HIT) =====
           ids_list = df["PRODUCTID"].dropna().astype(int).tolist()
+          valid_ids=set(ids_list)
 
           ids_to_process=[]
 
@@ -384,14 +388,14 @@ class LicenseGUI:
           WHERE A.id IN ({{IDS}}) 
           AND B.signature IS NOT NULL 
           AND LD.expirydate = (
-            SELECT MIN(ld3.expirydate) FROM edlvrs.licensedetail ld3 WHERE ld3.license_id = L.id
+            SELECT MAX(ld3.expirydate) FROM edlvrs.licensedetail ld3 WHERE ld3.license_id = L.id
           )
           """
 
         # 🔥 Process only missing IDs
-          export_blobs(conn, ids_to_process, SQL_PHOTO, self.output_dirs["photo"], ".tif")
-          export_blobs(conn, ids_to_process, SQL_SIGN2, self.output_dirs["sign2"], ".jpg")
-          export_blobs(conn, ids_to_process, SQL_SIGN1, self.output_dirs["sign1"], ".jpg")
+          export_blobs(conn, ids_to_process, SQL_PHOTO, self.output_dirs["photo"], ".tif",valid_ids)
+          export_blobs(conn, ids_to_process, SQL_SIGN2, self.output_dirs["sign2"], ".jpg",valid_ids)
+          export_blobs(conn, ids_to_process, SQL_SIGN1, self.output_dirs["sign1"], ".jpg",valid_ids)
 
           
           
