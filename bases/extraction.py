@@ -46,7 +46,18 @@ SELECT
     A.PASSPORTNUMBER AS Passport_No,
     '@photo\\' || A.ID || '.tif' AS Photo,
     A.MOBILENUMBER AS Contact_No,
-    (SELECT name FROM edlvrs.licenseissueoffice WHERE ID = ld.licenseissueoffice_id) AS License_Office,
+     WHERE lio.id = (
+            SELECT ld2.licenseissueoffice_id
+            FROM edlvrs.licensedetail ld2
+            WHERE ld2.newlicenseno = LD.newlicenseno
+              AND ld2.issuedate = (
+                    SELECT MIN(ld3.issuedate)
+                    FROM edlvrs.licensedetail ld3
+                    WHERE ld3.newlicenseno = LD.newlicenseno
+              )
+         )
+    ) AS License_Office,
+   
 
     A.WITNESSFIRSTNAME || ' ' || NVL(A.WITNESSMIDDLENAME,'') || ' ' || NVL(A.WITNESSLASTNAME,'') AS FH_Name,
 
