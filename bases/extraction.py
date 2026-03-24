@@ -47,6 +47,8 @@ SELECT
     '@photo\\' || A.ID || '.tif' AS Photo,
     A.MOBILENUMBER AS Contact_No,
     (
+    SELECT lio.name
+      FROM edlvrs.licenseissueoffice lio
      WHERE lio.id = (
             SELECT ld2.licenseissueoffice_id
             FROM edlvrs.licensedetail ld2
