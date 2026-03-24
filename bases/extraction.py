@@ -46,6 +46,7 @@ SELECT
     A.PASSPORTNUMBER AS Passport_No,
     '@photo\\' || A.ID || '.tif' AS Photo,
     A.MOBILENUMBER AS Contact_No,
+    (
      WHERE lio.id = (
             SELECT ld2.licenseissueoffice_id
             FROM edlvrs.licensedetail ld2
