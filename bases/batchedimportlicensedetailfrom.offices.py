@@ -302,9 +302,14 @@ class LicenseGUI:
           mask_name_length = (df["GIVEN_NAME"].str.len() + df["SURNAME"].str.len()) >= 30
           filtered_out_ids.extend(df.loc[mask_name_length, "PRODUCTID"].tolist())
 
-        # 🔹 Drop filtered rows from main dataframe
-          df = df[~mask_citizen & ~mask_name_length]
 
+          pattern = r'^\d{2}-\d{2}-\d{8}$'
+          mask_invalid_license = ~df["DRIVING_LICENSE_NO"].astype(str).str.match(pattern)
+          filtered_out_ids.extend(df.loc[mask_invalid_license, "PRODUCTID"].tolist())
+
+          mask_category = (df["CATEGORY"].str.len())<1
+        # 🔹 Drop filtered rows from main dataframe
+          df = df[~mask_citizen & ~mask_name_length & ~mask_invalid_license & ~mask_category]
         # 🔹 Drop duplicate PRODUCTID
           df = df.drop_duplicates(subset="PRODUCTID", keep="first")
 
