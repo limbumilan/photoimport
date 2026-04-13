@@ -270,9 +270,13 @@ class LicenseGUI:
            return
 
         try:
+            # Save for export_csv()
+          self.office = office
+          self.date_from = date_from
+          self.date_to = date_to    
         # 🔴 CLEAN OLD TEMP FILES (important)
           for path in self.output_dirs.values():
-            for f in os.listdir(path):
+             for f in os.listdir(path):
                 if f.endswith(".tmp"):
                     os.remove(os.path.join(path, f))
 
@@ -308,6 +312,7 @@ class LicenseGUI:
           filtered_out_ids.extend(df.loc[mask_invalid_license, "PRODUCTID"].tolist())
 
           mask_category = (df["CATEGORY"].str.len())<1
+          mask_address= (df["STREET_HOUSE_NUMBER"].str.len())<1
         # 🔹 Drop filtered rows from main dataframe
           df = df[~mask_citizen & ~mask_name_length & ~mask_invalid_license & ~mask_category]
         # 🔹 Drop duplicate PRODUCTID
@@ -402,7 +407,9 @@ class LicenseGUI:
           export_blobs(conn, ids_to_process, SQL_SIGN2, self.output_dirs["sign2"], ".jpg",valid_ids)
           export_blobs(conn, ids_to_process, SQL_SIGN1, self.output_dirs["sign1"], ".jpg",valid_ids)
 
-          
+          self.office = office
+          self.date_from = date_from
+          self.date_to = date_to
           
           conn.close()
 
@@ -418,14 +425,29 @@ class LicenseGUI:
         if self.df is None:
             messagebox.showwarning("No data", "Fetch data first!")
             return
+
+        
+        office = getattr(self, "office", "office")
+        date_from = getattr(self, "date_from", "start")
+        date_to = getattr(self, "date_to", "end")
+
+        def clean(x):
+            return str(x).replace("/", "-").replace(":", "-").replace(" ", "_")
+
+
+        
+        default_name = f"{clean(office)}_from_{clean(date_from)}_to_{clean(date_to)}.csv"
+        
         file = filedialog.asksaveasfilename(
             defaultextension=".csv",
+            initialfile=default_name,
             filetypes=[("CSV files", "*.csv")],
             title="Save CSV file"
         )
         if file:
             self.df.to_csv(file, index=False, encoding="utf-8-sig")
-            messagebox.showinfo("Saved", "CSV exported successfully!")
+            messagebox.showinfo("Saved", f"CSV exported successfully!\n{file}")
+            
             
     def clear_table(self):
         confirm = messagebox.askyesno("Confirm", "Clear all data from table?")
@@ -441,3 +463,5 @@ class LicenseGUI:
 root = tk.Tk()
 app = LicenseGUI(root)
 root.mainloop()
+
+
