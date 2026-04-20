@@ -16,6 +16,7 @@ class App(ctk.CTk):
         self._image_references = []
         Path("assets").mkdir(exist_ok=True)
 
+# Your code here
         self.create_widgets()
 
     def create_widgets(self):

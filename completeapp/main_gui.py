@@ -2,11 +2,16 @@ import customtkinter as ctk
 from PIL import Image, ImageDraw
 from pathlib import Path
 import tkinter as tk
+import mysql.connector
+import bcrypt
+from tkinter import messagebox
+
 from item1_landing import Item1Landing
 from item2_landing import Item2Landing
 from extractionfinal import LicenseExportLanding
 
 from importfromlicenseoffice import RegularLicenseExportLanding
+from user_management import UserManagementLanding
 # -------------------------------
 # PLACEHOLDER LANDING PAGES
 # -------------------------------
@@ -66,17 +71,107 @@ class App(ctk.CTk):
         logo = self.load_logo((160, 120))
         ctk.CTkLabel(parent, image=logo, text="").pack(pady=30)
 
-        ctk.CTkLabel(parent, text="Department of Transport Management",
-                     font=("Arial", 16, "bold"), text_color="#1E3A8A").pack(pady=10)
+        ctk.CTkLabel(
+        parent,
+        text="Department of Transport Management",
+        font=("Arial", 16, "bold"),
+        text_color="#1E3A8A"
+    ).pack(pady=10)
 
-        self.password = ctk.CTkEntry(parent, show="*", width=200)
+    # ✅ ADD USERNAME FIELD (THIS WAS MISSING)
+        self.username = ctk.CTkEntry(parent, width=200, placeholder_text="Username")
+        self.username.pack(pady=10)
+
+        self.password = ctk.CTkEntry(parent, show="*", width=200, placeholder_text="Password")
         self.password.pack(pady=10)
 
-        ctk.CTkButton(parent, text="Login", width=150, command=self.login).pack(pady=10)
-
+        ctk.CTkButton(
+        parent,
+        text="Login",
+        width=150,
+        command=self.login
+    ).pack(pady=10)
+        
     def login(self):
-        if self.password.get():
-            self.show_main()
+        import mysql.connector
+        from tkinter import messagebox
+
+        username = self.username.get().strip()
+        password = self.password.get().strip()
+
+        if not username or not password:
+           messagebox.showwarning("Login Failed", "Enter username and password")
+           return
+
+        try:
+           conn = mysql.connector.connect(
+               host="localhost",
+               user="root",
+               database="print_mangement"
+        )
+
+           cursor = conn.cursor()
+
+           cursor.execute(
+            "SELECT password, role FROM users WHERE username=%s",
+            (username,)
+        )
+
+           result = cursor.fetchone()
+           conn.close()
+
+           if not result:
+              messagebox.showerror("Login Failed", "User not found")
+              return
+
+           db_password, role = result
+
+        # SIMPLE TEXT COMPARISON
+           if password == db_password:
+              messagebox.showinfo("Success", f"Welcome {username} ({role})")
+              self.current_role = role
+              self.show_main()
+              self.apply_role_permissions()
+
+              
+           else:
+             messagebox.showerror("Login Failed", "Wrong password")
+
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", str(err))
+    def apply_role_permissions(self):
+        role = getattr(self, "current_role", None)
+
+    # HIDE ALL FIRST
+        for btn in self.tab_buttons.values():
+          btn.pack_forget()
+
+    # ROLE RULES (MATCH show_tab)
+        role_map = {
+        "admin": ["Reports", "Export", "User management", "Logout"],
+        "report_user": ["Reports", "Logout"],
+        "fast_user": ["Export", "Logout"],
+        "regular_user": ["Reports", "Logout"],
+        "user": ["Reports", "Logout"]
+    }
+
+        allowed = role_map.get(role, [])
+        self.allowed_tabs = allowed   # ✅ IMPORTANT
+
+    # SHOW ONLY ALLOWED
+        for tab in allowed:
+          btn = self.tab_buttons.get(tab)
+          if btn:
+            btn.pack(fill="x", padx=10, pady=4)
+
+    # OPEN DEFAULT TAB
+        if allowed:
+          first_tab = allowed[0]
+          if first_tab != "Logout":
+            self.show_tab(first_tab)
+    
+
+   
 
     # -------------------------------
     # MAIN UI
@@ -146,7 +241,7 @@ class App(ctk.CTk):
         self.tabs_frame.pack(fill="y", expand=True)
 
         self.tab_buttons = {}
-        for tab in ["Reports", "Export", "Logout"]:
+        for tab in ["Reports", "Export","User management", "Logout"]:
             btn = ctk.CTkButton(
                 self.tabs_frame, text=tab, height=42,
                 fg_color="transparent", text_color="white",
@@ -161,7 +256,8 @@ class App(ctk.CTk):
         # IMPORTANT: tabs must NOT be packed here
         self.tabs = {
             "Reports": ctk.CTkFrame(self.content, fg_color="#FFFFFF"),
-            "Export": ctk.CTkFrame(self.content, fg_color="#FFFFFF")
+            "Export": ctk.CTkFrame(self.content, fg_color="#FFFFFF"),
+            "User management": ctk.CTkFrame(self.content, fg_color="#FFFFFF")
         }
 
         # track last shown tab so we can restore after collapse
@@ -170,7 +266,7 @@ class App(ctk.CTk):
 
         self.create_reports_tab(self.tabs["Reports"])
         self.create_export_tab(self.tabs["Export"])
-
+        self.create_users_tab(self.tabs["User management"])
         self.show_tab("Reports")
 
     # -------------------------------
@@ -182,84 +278,90 @@ class App(ctk.CTk):
         else:
             self.show_tab(name)
 
+
+
     def show_tab(self, name):
-        # show_tab called -> name
-        if self.current_landing:
+
+    # -------------------------------
+    # ROLE-BASED ACCESS CONTROL
+    # -------------------------------
+       role = getattr(self, "current_role", None)
+
+       allowed_map = {
+        "admin": ["Reports", "Export", "User management","Logout"],
+        "report_user": ["Reports","Logout"],
+        "fast_user": ["Export","Logout"],
+        "regular_user": ["Reports","Logout"],
+        "user": ["Reports","Logout"]
+    }
+
+       allowed = allowed_map.get(role, [])
+
+    # BLOCK UNAUTHORIZED TAB ACCESS
+       if name not in allowed:
+        print(f"Access denied: {name} for role {role}")
+        return
+
+    # -------------------------------
+    # DESTROY LANDING PAGE IF EXISTS
+    # -------------------------------
+       if self.current_landing:
+        try:
             self.current_landing.destroy()
-            self.current_landing = None
-
-        for tab in self.tabs.values():
-            tab.place_forget()
-
-        frame = self.tabs[name]
-        self.content.update_idletasks()
-        w = self.content.winfo_width()
-
-        # place the frame immediately at 0 so content is visible right away
-        frame.place(x=0, y=0, relwidth=1, relheight=1)
-        try:
-            # ensure geometry is calculated and widget is on top
-            frame.update_idletasks()
-            frame.update()
-            frame.tkraise()
-        except Exception:
-            try:
-                frame.lift()
-            except Exception:
-                pass
-        try:
-            children = frame.winfo_children()
-            # inspected children count = %d
-            for c in children:
-                pass
-
-            # recursive inspection helper
-            def _dump(w, depth=0, maxdepth=4):
-                if depth > maxdepth:
-                    return
-                try:
-                    kids = w.winfo_children()
-                except Exception:
-                    return
-                for k in kids:
-                    try:
-                        ktype = type(k)
-                        try:
-                            text = k.cget('text')
-                        except Exception:
-                            text = None
-                        try:
-                            mapped = k.winfo_ismapped()
-                            w_w = k.winfo_width()
-                            w_h = k.winfo_height()
-                            w_x = k.winfo_x()
-                            w_y = k.winfo_y()
-                        except Exception:
-                            mapped = None
-                            w_w = w_h = w_x = w_y = None
-                        # node depth=%d type=%s text=%s mapped=%s w/h=%s x/y=%s
-                    except Exception:
-                        pass
-                    _dump(k, depth+1, maxdepth)
-
-            _dump(frame)
         except Exception:
             pass
-        try:
-            frame.tkraise()
-        except Exception:
-            try:
-                frame.lift()
-            except Exception:
-                pass
+        self.current_landing = None
 
-        # record last shown tab
+    # -------------------------------
+    # HIDE ALL TABS
+    # -------------------------------
+       for tab in self.tabs.values():
+        try:
+            tab.place_forget()
+        except Exception:
+            pass
+
+    # -------------------------------
+    # SHOW REQUESTED TAB
+    # -------------------------------
+       frame = self.tabs.get(name)
+       if not frame:
+        return
+
+       try:
+          frame.place(x=0, y=0, relwidth=1, relheight=1)
+          frame.tkraise()
+       except Exception:
+        pass
+
+    # -------------------------------
+    # FORCE UI UPDATE (SAFE)
+    # -------------------------------
+        try:
+           frame.update_idletasks()
+        except Exception:
+          pass
+
+    # -------------------------------
+    # HIGHLIGHT ACTIVE BUTTON
+    # -------------------------------
+        for t, btn in self.tab_buttons.items():
+            try:
+                btn.configure(
+                fg_color="#274690" if t == name else "transparent"
+            )
+            except Exception:
+              pass
+
+    # -------------------------------
+    # TRACK STATE
+    # -------------------------------
         self._last_tab = name
         self._tabs_visible = True
 
-        for t, btn in self.tab_buttons.items():
-            btn.configure(fg_color="#274690" if t == name else "transparent")
 
+
+   
     def _ensure_update(self, widget, depth=0, maxdepth=6):
         try:
             widget.update_idletasks()
@@ -386,16 +488,74 @@ class App(ctk.CTk):
             except Exception:
                 pass
 
-    def show_tab_buttons(self):
-        # re-pack in the original order
-        for tab in ["Reports", "Export", "Logout"]:
-            btn = self.tab_buttons.get(tab)
-            if btn:
-                try:
-                    btn.pack(fill="x", padx=10, pady=4)
-                except Exception:
-                    pass
 
+    def show_tab(self, name):
+
+       role = getattr(self, "current_role", None)
+       allowed = getattr(self, "allowed_tabs", [])
+
+    # ALWAYS allow logout
+       if name == "Logout":
+        self.show_login()
+        return
+
+    # BLOCK UNAUTHORIZED
+       if name not in allowed:
+        print(f"Access denied: {name} for role {role}")
+        return
+
+    # DESTROY LANDING
+       if self.current_landing:
+        try:
+            self.current_landing.destroy()
+        except:
+            pass
+        self.current_landing = None
+
+    # HIDE ALL
+       for tab in self.tabs.values():
+        try:
+            tab.place_forget()
+        except:
+            pass
+
+        frame = self.tabs.get(name)
+        if not frame:
+         return
+
+        frame.place(x=0, y=0, relwidth=1, relheight=1)
+        frame.tkraise()
+
+        try:
+          frame.update_idletasks()
+        except:
+          pass
+ 
+    # HIGHLIGHT BUTTON
+        for t, btn in self.tab_buttons.items():
+           btn.configure(
+            fg_color="#274690" if t == name else "transparent"
+        )
+
+        self._last_tab = name
+        self._tabs_visible = True
+
+
+
+    def show_tab_buttons(self):
+    # re-pack in the original order
+        for tab in ["Reports", "Export", "User management", "Logout"]:
+           btn = self.tab_buttons.get(tab)
+           if btn:
+            # IMPORTANT: only show if user is allowed
+              if hasattr(self, "allowed_tabs") and tab not in self.allowed_tabs:
+                 continue
+
+              try:
+                btn.pack(fill="x", padx=10, pady=4)
+              except Exception:
+                pass
+    
     # -------------------------------
     # TABS CONTENT
     # -------------------------------
@@ -432,6 +592,26 @@ class App(ctk.CTk):
         except Exception:
             pass
 
+    def create_users_tab(self, parent):
+        scroll = ctk.CTkFrame(parent, fg_color="#FFFFFF")
+        scroll.pack(fill="both", expand=True, padx=20, pady=20)
+
+        ctk.CTkLabel(
+        scroll,
+        text="User Management",
+        font=("Arial", 18, "bold"),
+        text_color="#1E3A8A"
+    ).pack(pady=10)
+
+        ctk.CTkButton(
+        scroll,
+        text="▶ Open User Management",
+        height=40,
+        fg_color="#E6EEF9",
+        text_color="#1E3A8A",
+        command=lambda: self.open_item("User management")
+    ).pack(fill="x", pady=10)
+    
     # -------------------------------
     # LANDING PAGES
     # -------------------------------
@@ -446,9 +626,13 @@ class App(ctk.CTk):
             self.current_landing = Item2Landing(self.content, lambda: self.show_tab("Reports"))
         elif name == "emergency license":
             self.current_landing = LicenseExportLanding(self.content, lambda: self.show_tab("Export"))
-        else:
+        elif name == "regular license":
             self.current_landing = RegularLicenseExportLanding(self.content, lambda: self.show_tab("Export"))
         # ensure geometry is calculated; fallback to window width if needed
+        elif name == "User management":
+             self.current_landing = UserManagementLanding(self.content, lambda: self.show_tab("User management"))
+        else:
+            return
         try:
             self.content.update_idletasks()
             w = self.content.winfo_width()
