@@ -1,3 +1,4 @@
+
 import oracledb
 import pandas as pd
 from datetime import datetime
@@ -11,12 +12,12 @@ from pathlib import Path
 USERNAME = "dotm_milan"
 DSN = "10.250.252.201/DOTM"
 
-BASE_DATA_FOLDER = Path.home()/ "Desktop" / "DATA"
+BASE_DATA_FOLDER = r"C:\Users\HP\Desktop\DATA"
 
 OUTPUT_DIRS = {
-    "photo": BASE_DATA_FOLDER / "Photo",
-    "sign1": BASE_DATA_FOLDER /"Sign1",
-    "sign2": BASE_DATA_FOLDER / "Sign2"
+    "photo": os.path.join(BASE_DATA_FOLDER, "Photo"),
+    "sign1": os.path.join(BASE_DATA_FOLDER, "Sign1"),
+    "sign2": os.path.join(BASE_DATA_FOLDER, "Sign2")
 }
 
 # Create folders if missing
@@ -46,22 +47,7 @@ SELECT
     A.PASSPORTNUMBER AS Passport_No,
     '@photo\\' || A.ID || '.tif' AS Photo,
     A.MOBILENUMBER AS Contact_No,
-
-     (
-      SELECT lio.name
-      FROM edlvrs.licenseissueoffice lio
-      WHERE lio.id = (
-            SELECT ld2.licenseissueoffice_id
-            FROM edlvrs.licensedetail ld2
-            WHERE ld2.newlicenseno = LD.newlicenseno
-              AND ld2.issuedate = (
-                    SELECT MIN(ld3.issuedate)
-                    FROM edlvrs.licensedetail ld3
-                    WHERE ld3.newlicenseno = LD.newlicenseno
-              )
-         )
-    ) AS License_Office,
-   
+    (SELECT name FROM edlvrs.licenseissueoffice WHERE ID = ld.licenseissueoffice_id) AS License_Office,
 
     A.WITNESSFIRSTNAME || ' ' || NVL(A.WITNESSMIDDLENAME,'') || ' ' || NVL(A.WITNESSLASTNAME,'') AS FH_Name,
 
@@ -98,7 +84,7 @@ and ld.issuedate=(
         FROM EDLVRS.LICENSEDETAIL
         WHERE LICENSE_ID = L.ID)
 and ad.addresstype='PERM'
-AND l.printed = '0'
+
 and l.licensestatus = 'VALID'
 and ld.accountstatus = 'VALID'
 
@@ -262,3 +248,4 @@ def main():
 # ============================================
 if __name__ == "__main__":
     main()
+
