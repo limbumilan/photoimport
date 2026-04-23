@@ -56,7 +56,11 @@ SELECT
        FROM edlvrs.licensedetail dl
        JOIN edlvrs.licensecategory cl ON cl.licensedetail_id = dl.id
        JOIN edlvrs.licensecategorytype tcl ON tcl.id = cl.lisccategorytype_id
-       WHERE dl.newlicenseno = LD.newlicenseno) AS Category
+       WHERE dl.newlicenseno = LD.newlicenseno
+       and dl.licensefrm is not null
+     ) AS Category
+
+       
 FROM edlvrs.licensedetail LD
 JOIN edlvrs.license L ON LD.license_id = L.id
 JOIN edlvrs.applicant A ON L.applicant_id = A.id
