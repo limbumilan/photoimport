@@ -66,11 +66,17 @@ SELECT
     ), '') || ' ' || COALESCE(AD.tole,'') || '-' || COALESCE(AD.wardnumber,'') AS Street_House_Number,
     (SELECT name FROM edlvrs.country WHERE id = AD.country_id) AS Country,
     LD.NEWLICENSENO AS Driving_License_No,
+    
     (SELECT LISTAGG(tcl.type, ', ') WITHIN GROUP (ORDER BY tcl.type)
        FROM edlvrs.licensedetail dl
        JOIN edlvrs.licensecategory cl ON cl.licensedetail_id = dl.id
        JOIN edlvrs.licensecategorytype tcl ON tcl.id = cl.lisccategorytype_id
-       WHERE dl.newlicenseno = LD.newlicenseno) AS Category
+       WHERE dl.newlicenseno = LD.newlicenseno
+       and dl.licensefrm is not null
+        ) AS Category
+
+
+        
 FROM edlvrs.licensedetail LD
 JOIN edlvrs.license L ON LD.license_id = L.id
 JOIN edlvrs.applicant A ON L.applicant_id = A.id
@@ -81,11 +87,13 @@ AND LD.expirydate = (
     FROM EDLVRS.LICENSEDETAIL ld2
     WHERE ld2.license_id = L.ID
       AND ld2.expirydate > ADD_MONTHS(SYSDATE, 12)
+      
 )
 AND ad.addresstype='PERM'
 AND l.printed = '0'
 AND l.licensestatus = 'VALID'
 AND ld.accountstatus = 'VALID'
+
 """
 
 # ============================================
@@ -164,14 +172,17 @@ def main():
             # -----------------------
             # Filtering
             # -----------------------
-            mask_citizen = df["CITIZENSHIP_NO"].str.contains("ANUSHUCHI", na=False)
-            mask_name_length = (df["GIVEN_NAME"].str.len() + df["SURNAME"].str.len()) >= 30
 
-            # Collect skipped IDs
+            mask1 = df["CITIZENSHIP_NO"].str.contains("ANUSHUCHI", na=False)
+            mask2 = (df["GIVEN_NAME"].str.len() + df["SURNAME"].str.len()) >= 30
+            mask3 = ~df["DRIVING_LICENSE_NO"].astype(str).str.match(r'^\d{2}-\d{2}-\d{8}$')
+            mask4 = df["CATEGORY"].str.len() < 1
+            mask_address= (df["STREET_HOUSE_NUMBER"].str.len())<1
+                        # Collect skipped IDs
             skipped_ids.extend(df.loc[mask_citizen | mask_name_length, "PRODUCTID"].tolist())
 
             # Drop filtered rows
-            df = df[~mask_citizen & ~mask_name_length]
+            df = df[~mask1 & ~mask2 & ~mask3 & ~mask4 & ~mask_addresss ]
 
             # Drop duplicate PRODUCTID
             df = df.drop_duplicates(subset="PRODUCTID", keep="first")
