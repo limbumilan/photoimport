@@ -179,10 +179,10 @@ def main():
             mask4 = df["CATEGORY"].str.len() < 1
             mask_address= (df["STREET_HOUSE_NUMBER"].str.len())<1
                         # Collect skipped IDs
-            skipped_ids.extend(df.loc[mask_citizen | mask_name_length, "PRODUCTID"].tolist())
+            skipped_ids.extend(df.loc[mask1 | mask2| mask3| mask4| mask_address, "PRODUCTID"].tolist())
 
             # Drop filtered rows
-            df = df[~mask1 & ~mask2 & ~mask3 & ~mask4 & ~mask_addresss ]
+            df = df[~mask1 & ~mask2 & ~mask3 & ~mask4 & ~mask_address ]
 
             # Drop duplicate PRODUCTID
             df = df.drop_duplicates(subset="PRODUCTID", keep="first")
