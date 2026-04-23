@@ -57,7 +57,9 @@ SELECT
        FROM edlvrs.licensedetail dl
        JOIN edlvrs.licensecategory cl ON cl.licensedetail_id = dl.id
        JOIN edlvrs.licensecategorytype tcl ON tcl.id = cl.lisccategorytype_id
-       WHERE dl.newlicenseno = LD.newlicenseno) AS Category
+       WHERE dl.newlicenseno = LD.newlicenseno
+       and dl.licensefrm is not null) AS Category
+       
 FROM edlvrs.licensedetail LD
 JOIN edlvrs.license L ON LD.license_id = L.id
 JOIN edlvrs.applicant A ON L.applicant_id = A.id
@@ -404,10 +406,11 @@ class LicenseGUI:
         mask2 = (df["GIVEN_NAME"].str.len() + df["SURNAME"].str.len()) >= 30
         mask3 = ~df["DRIVING_LICENSE_NO"].astype(str).str.match(r'^\d{2}-\d{2}-\d{8}$')
         mask4 = df["CATEGORY"].str.len() < 1
+        mask_address= (df["STREET_HOUSE_NUMBER"].str.len())<1
 
-        filtered_out_ids.extend(df.loc[mask1 | mask2 | mask3 | mask4, "PRODUCTID"].tolist())
+        filtered_out_ids.extend(df.loc[mask1 | mask2 | mask3 | mask4 | mask_address, "PRODUCTID"].tolist())
 
-        df = df[~mask1 & ~mask2 & ~mask3 & ~mask4]
+        df = df[~mask1 & ~mask2 & ~mask3 & ~mask4&~mask_address]
         df = df.drop_duplicates(subset="PRODUCTID")
 
         self.df = df
