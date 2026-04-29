@@ -672,7 +672,7 @@ SELECT
      JOIN edlvrs.licensecategory cl ON cl.licensedetail_id = dl.id
      JOIN edlvrs.licensecategorytype tcl ON tcl.id = cl.lisccategorytype_id
      WHERE dl.newlicenseno = LD.newlicenseno
-    ) AS CATEGORY,
+     and dl.licensefrm is not null) AS CATEGORY,
 
     -- LAST TRANSACTION OFFICE NAME
     (SELECT MAX(lio1.name) KEEP (DENSE_RANK LAST ORDER BY ld3.issuedate)
