@@ -35,28 +35,41 @@ SELECT
     (SELECT TYPE FROM EDLVRS.GENDER WHERE ID = A.GENDER_ID) AS Sex,
     TO_CHAR(A.DATEOFBIRTHAD,'DD-MM-YYYY') AS Date_of_birth,
     'Government of Nepal' AS Nationality,
-    (SELECT TO_CHAR(MIN(CAST(ISSUEDATE AS DATE)),'DD-MM-YYYY')
-       FROM edlvrs.licensedetail
-       WHERE newlicenseno = ld.newlicenseno) AS Date_of_issue,
+    (
+    SELECT TO_CHAR(CAST(issuedate AS DATE), 'DD-MM-YYYY')
+    FROM (
+        SELECT issuedate
+        FROM edlvrs.licensedetail
+        WHERE newlicenseno = ld.newlicenseno
+        ORDER BY issuedate
+    )
+    WHERE ROWNUM = 1
+) AS Date_of_issue,
+   
+
+       
     TO_CHAR(LD.EXPIRYDATE, 'DD-MM-YYYY') AS Date_of_expiry,
     A.CITIZENSHIPNUMBER AS Citizenship_No,
     A.PASSPORTNUMBER AS Passport_No,
     '@photo\\' || A.ID || '.tif' AS Photo,
     A.MOBILENUMBER AS Contact_No,
-    (
-      SELECT lio.name
-      FROM edlvrs.licenseissueoffice lio
-      WHERE lio.id = (
-            SELECT ld2.licenseissueoffice_id
-            FROM edlvrs.licensedetail ld2
-            WHERE ld2.newlicenseno = LD.newlicenseno
-              AND ld2.issuedate = (
-                    SELECT MIN(ld3.issuedate)
-                    FROM edlvrs.licensedetail ld3
-                    WHERE ld3.newlicenseno = LD.newlicenseno
-              )
-         )
-    ) AS License_Office,
+
+
+(
+    SELECT lio.name
+    FROM edlvrs.licensedetail ld2
+    JOIN edlvrs.licenseissueoffice lio
+        ON lio.id = ld2.licenseissueoffice_id
+    WHERE ld2.newlicenseno = LD.newlicenseno
+    ORDER BY ld2.issuedate ASC
+    FETCH FIRST 1 ROW ONLY
+) AS License_Office,
+
+
+
+
+   
+    
     A.WITNESSFIRSTNAME || ' ' || NVL(A.WITNESSMIDDLENAME,'') || ' ' || NVL(A.WITNESSLASTNAME,'') AS FH_Name,
     (SELECT TYPE FROM edlvrs.bloodgroup WHERE ID = A.BLOODGROUP_ID) AS BG,
     (SELECT name FROM edlvrs.district WHERE ID = AD.district_id) AS Region,
@@ -72,7 +85,7 @@ SELECT
        JOIN edlvrs.licensecategory cl ON cl.licensedetail_id = dl.id
        JOIN edlvrs.licensecategorytype tcl ON tcl.id = cl.lisccategorytype_id
        WHERE dl.newlicenseno = LD.newlicenseno
-       and dl.licensefrm is not null
+       
         ) AS Category
 
 
@@ -86,7 +99,7 @@ AND LD.expirydate = (
     SELECT MAX(ld2.expirydate)
     FROM EDLVRS.LICENSEDETAIL ld2
     WHERE ld2.license_id = L.ID
-      AND ld2.expirydate > ADD_MONTHS(SYSDATE, 6)
+      AND ld2.expirydate > ADD_MONTHS(SYSDATE, 5)
       
 )
 AND ad.addresstype='PERM'
